@@ -32,8 +32,12 @@
         
         <div class="start-section">
             <h2>Ready to start chatting?</h2>
-            <button @onclick="CreateNewChatDirectly" class="btn btn-primary start-btn">
+            <button @onclick="CreateNewChatDirectly" class="btn btn-primary start-btn" disabled="@isProcessing">
                 <span class="oi oi-plus"></span> Start a New Chat
+                @if (isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"></span>
+                }
             </button>
         </div>
     </div>
@@ -41,8 +45,19 @@
 
 @code {
     private bool isProcessing = false;
+    private bool isGitHubPages;
 
-    // 直接在客户端创建聊天，修复重定向问题
+    protected override async Task OnInitializedAsync()
+    {
+        // 判断是否在 GitHub Pages 环境
+        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        
+        // 清除可能的旧会话状态
+        await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", "lastChatId");
+        await JSRuntime.InvokeVoidAsync("console.log", "首页初始化，已清除会话状态");
+    }
+
+    // 修改的创建聊天方法
     private async Task CreateNewChatDirectly()
     {
         if (isProcessing)
@@ -53,56 +68,48 @@
         try 
         {
             // 记录开始创建聊天
-            await JSRuntime.InvokeVoidAsync("console.log", "Creating new chat directly");
+            await JSRuntime.InvokeVoidAsync("console.log", "创建新聊天开始");
             
             // 直接在这里创建聊天
             var newChat = new Chat();
             await ChatStorage.SaveChatAsync(newChat);
             
             // 记录新创建的聊天ID
-            await JSRuntime.InvokeVoidAsync("console.log", $"Created chat with ID: {newChat.Id}");
+            await JSRuntime.InvokeVoidAsync("console.log", $"已创建聊天，ID: {newChat.Id}");
+            
+            // 设置聊天会话ID到sessionStorage，帮助跟踪导航
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "lastChatId", newChat.Id);
             
             // 构建聊天URL
             string chatUrl = $"chat/{newChat.Id}";
             
-            // 检查是否在 GitHub Pages 环境
-            bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
-            
-            // 使用routeHandler来处理导航，避免重定向循环
             if (isGitHubPages)
             {
-                // 避免使用window.location.replace，改用JS导航辅助函数
-                await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to: {chatUrl}");
+                // 在GitHub Pages上使用纯JavaScript导航以减少潜在问题
                 await JSRuntime.InvokeVoidAsync("eval", $@"
                     try {{
                         var baseHref = document.querySelector('base').getAttribute('href') || '/';
                         var fullPath = baseHref + '{chatUrl}';
-                        console.log('Navigating to: ' + fullPath);
+                        console.log('正在导航到新聊天页面:', fullPath);
                         
-                        // 使用history.pushState避免整页刷新导致的重定向循环
-                        history.pushState(null, '', fullPath);
-                        // 触发Blazor路由
-                        window.dispatchEvent(new Event('popstate'));
+                        // 使用完全页面刷新来确保干净状态
+                        window.location.href = fullPath;
                     }} catch(e) {{
-                        console.error('Navigation error:', e);
-                        // 备用方案
-                        window.location.href = '{chatUrl}';
+                        console.error('导航错误:', e);
+                        alert('创建聊天时出错，请重试');
                     }}
                 ");
             }
             else
             {
-                // 在本地环境使用 NavigationManager
-                NavigationManager.NavigateTo(chatUrl);
+                // 在本地环境使用强制刷新
+                NavigationManager.NavigateTo(chatUrl, forceLoad: true);
             }
         }
         catch (Exception ex) 
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error creating chat: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", "Error creating new chat. Please try again.");
-        }
-        finally
-        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"创建聊天时出错: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "创建新聊天时出错。请重试。");
             isProcessing = false;
         }
     }
