@@ -26,7 +26,7 @@
         {
             @foreach (var chat in chats.OrderByDescending(c => c.CreatedAt))
             {
-                <div class="chat-item @(IsActive(chat.Id) ? "active" : "")" @onclick="() => NavigateToChat(chat.Id)">
+                <div class="chat-item @(IsActive(chat.Id) ? "active" : "")" @onclick="() => NavigateToChat(chat.Id, chat)">
                     <div class="chat-title">@chat.Title</div>
                     <div class="chat-actions">
                         <button class="btn btn-sm btn-delete" @onclick:stopPropagation="true" @onclick="() => DeleteChatAsync(chat.Id)">
@@ -51,6 +51,13 @@
     private async Task LoadChats()
     {
         chats = await ChatStorage.GetAllChatsAsync();
+        
+        // 记录所有聊天ID，便于调试
+        await JSRuntime.InvokeVoidAsync("console.log", $"加载了 {chats.Count} 个聊天");
+        foreach (var chat in chats)
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", $"聊天ID: {chat.Id}, 标题: {chat.Title}, 消息数: {chat.Messages.Count}");
+        }
     }
 
     private async Task CreateNewChat()
@@ -62,42 +69,21 @@
 
         await ChatStorage.SaveChatAsync(newChat);
         await LoadChats();
-        NavigateToChat(newChat.Id);
+        NavigateToChat(newChat.Id, newChat);
     }
 
-    private async Task NavigateToChat(string chatId)
+    private async Task NavigateToChat(string chatId, Chat chat)
     {
         try
         {
+            // 首先，确保聊天记录已保存到单独的聊天缓存中
+            await JSRuntime.InvokeVoidAsync("cacheChatForNavigation", chatId, JsonSerializer.Serialize(chat));
+            
             // 使用与聊天页面一致的导航方法，确保GitHub Pages环境下正常工作
             if (isGitHubPages)
             {
-                // 在GitHub Pages环境下使用JavaScript导航
-                await JSRuntime.InvokeVoidAsync("eval", $@"
-                    try {{
-                        // 获取基础路径
-                        var baseUrl = document.querySelector('base').getAttribute('href') || '/';
-                        if (!baseUrl.endsWith('/')) baseUrl += '/';
-                        
-                        // 记录详细日志
-                        console.log('导航到聊天，基础路径:', baseUrl);
-                        console.log('聊天ID:', '{chatId}');
-                        
-                        // 构建完整URL，确保不会有双斜杠
-                        var chatUrl = baseUrl + 'chat/{chatId}';
-                        console.log('完整URL:', chatUrl);
-                        
-                        // 记录导航前URL
-                        console.log('当前URL:', window.location.href);
-                        
-                        // 使用硬导航确保页面刷新
-                        window.location.href = chatUrl;
-                    }} catch(e) {{
-                        console.error('导航错误:', e);
-                        // 后备方案
-                        window.location.href = '/grokbot/chat/{chatId}';
-                    }}
-                ");
+                // 在GitHub Pages环境下使用硬导航
+                await JSRuntime.InvokeVoidAsync("navigateToChat", chatId);
             }
             else
             {
