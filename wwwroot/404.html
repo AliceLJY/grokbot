@@ -9,55 +9,8 @@
     <link href="css/app.css" rel="stylesheet" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <script type="text/javascript">
-        // 处理GitHub Pages上的SPA路由
-        (function() {
-            var path = window.location.pathname;
-            var basePath = '/grokbot/';
-            
-            console.log('404处理程序: 当前路径 =', path);
-            
-            // 如果路径包含chat部分，尝试保留正确的路由
-            if (path.includes('/chat/') && path.length > 12) { // '/grokbot/chat/' 长度是13
-                // 提取聊天ID并重定向
-                var segments = path.split('/');
-                if (segments.length >= 4) {
-                    var chatId = segments[3];
-                    if (chatId && chatId.length > 0) {
-                        // 构建正确的路径
-                        var correctPath = basePath + 'chat/' + chatId;
-                        console.log('404处理程序: 重定向到聊天页面:', correctPath);
-                        
-                        // 使用pushState而不是replace，避免刷新
-                        if (window.history && window.history.pushState) {
-                            window.history.pushState(null, '', correctPath);
-                            console.log('使用pushState设置路径');
-                            
-                            // 延迟触发popstate事件，确保Blazor加载完成
-                            setTimeout(function() {
-                                window.dispatchEvent(new Event('popstate'));
-                                console.log('触发popstate事件');
-                            }, 500);
-                            
-                            // 延迟刷新页面，用于确保路由生效
-                            setTimeout(function() {
-                                window.location.href = correctPath;
-                                console.log('执行延迟重定向');
-                            }, 1000);
-                            
-                            return;
-                        } else {
-                            // 后备方案
-                            window.location.replace(correctPath);
-                            return;
-                        }
-                    }
-                }
-            }
-            
-            // 其他情况回到首页
-            console.log('404处理程序: 重定向到首页');
-            window.location.replace(basePath);
-        })();
+        // 立即执行重定向到主页
+        window.location.href = "/grokbot/";
     </script>
 </head>
 <body>
