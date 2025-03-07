@@ -53,11 +53,27 @@ jobs:
             exit 1
           fi
 
-      - name: Change base-tag in index.html
-        run: sed -i 's/<base href="\/\" \/>/<base href="\/grokbot\/" \/>/g' release/wwwroot/index.html
+      - name: Copy 404.html to output
+        run: |
+          if [ -f "release/wwwroot/index.html" ] && [ ! -f "release/wwwroot/404.html" ]; then
+            cp release/wwwroot/index.html release/wwwroot/404.html
+            echo "Created 404.html from index.html"
+          fi
 
-      - name: Add .nojekyll file
+      - name: Create .nojekyll file
         run: touch release/wwwroot/.nojekyll
+
+      - name: Ensure correct base path
+        run: |
+          if grep -q 'base href="/"' release/wwwroot/index.html; then
+            echo "Updating base href in index.html"
+            sed -i 's|<base href="/" />|<base href="/grokbot/" />|g' release/wwwroot/index.html
+          fi
+          
+          if [ -f "release/wwwroot/404.html" ]; then
+            echo "Updating base href in 404.html"
+            sed -i 's|<base href="/" />|<base href="/grokbot/" />|g' release/wwwroot/404.html
+          fi
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
