@@ -5,97 +5,102 @@ using System.Threading.Tasks;
 using System.Text.Json;
 using System.Text;
 using GrokBot.Models;
+using Microsoft.JSInterop;
 
 namespace GrokBot.Services
 {
     public class GrokService
     {
         private readonly HttpClient _httpClient;
+        private readonly IJSRuntime _jsRuntime;
         private readonly string _apiUrl;
 
-        public GrokService(HttpClient httpClient)
+        public GrokService(HttpClient httpClient, IJSRuntime jsRuntime)
         {
             _httpClient = httpClient;
+            _jsRuntime = jsRuntime;
             
-            // 使用固定的Render.com URL
-            string renderUrl = "https://grokbot-backend.onrender.com";
+            // 使用固定的确切的Render.com URL
+            const string RENDER_API_URL = "https://grokbot-backend.onrender.com/api/grok/chat";
             
-            // In development, use local API, in production use Render.com API
+            // 在开发环境使用本地API，在生产环境使用Render.com API
 #if DEBUG
-            _apiUrl = "https://localhost:7001/api/grok/chat";
+            _apiUrl = "http://localhost:5000/api/grok/chat";
 #else
-            _apiUrl = $"{renderUrl}/api/grok/chat";
+            _apiUrl = RENDER_API_URL;
 #endif
 
+            // 记录使用的API URL
             Console.WriteLine($"Using API URL: {_apiUrl}");
+            
+            // 将URL保存到浏览器控制台以便调试
+            _jsRuntime.InvokeVoidAsync("console.log", $"API URL: {_apiUrl}");
         }
 
         public async Task<string> GetChatResponseAsync(Chat chat)
         {
             try
             {
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Sending chat request to: {_apiUrl}");
                 Console.WriteLine($"Sending request to {_apiUrl}");
                 
-                // 添加超时设置和重试逻辑
+                // 添加超时设置
                 _httpClient.Timeout = TimeSpan.FromSeconds(30);
                 
-                // 添加错误处理和重试逻辑
-                int maxRetries = 3;
-                for (int attempt = 1; attempt <= maxRetries; attempt++)
+                // 直接使用JsonContent构建请求体
+                var content = JsonContent.Create(chat);
+                
+                // 发送请求
+                var response = await _httpClient.PostAsync(_apiUrl, content);
+
+                // 记录响应状态码
+                Console.WriteLine($"API Response Status: {response.StatusCode}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"API Response Status: {response.StatusCode}");
+
+                if (response.IsSuccessStatusCode)
                 {
+                    var responseText = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"API Response: {responseText}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"API Response: {responseText}");
+
                     try
                     {
-                        var response = await _httpClient.PostAsJsonAsync(_apiUrl, chat);
-
-                        Console.WriteLine($"API Response Status: {response.StatusCode}");
-
-                        if (response.IsSuccessStatusCode)
+                        var responseData = JsonSerializer.Deserialize<JsonElement>(responseText);
+                        if (responseData.TryGetProperty("response", out var responseContent))
                         {
-                            var responseText = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"API Response: {responseText}");
-
-                            var responseData = JsonSerializer.Deserialize<JsonElement>(responseText);
-                            if (responseData.TryGetProperty("response", out var responseContent))
-                            {
-                                return responseContent.GetString() ?? "No response content";
-                            }
-                            
-                            return "Sorry, I couldn't understand the API response format.";
-                        }
-                        else if (attempt < maxRetries)
-                        {
-                            // 如果不是最后一次尝试，等待后重试
-                            await Task.Delay(1000 * attempt); // 指数退避
-                            Console.WriteLine($"Retrying API call, attempt {attempt + 1}/{maxRetries}");
-                            continue;
+                            return responseContent.GetString() ?? "No response content";
                         }
                         
-                        var errorContent = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"API Error: {response.StatusCode}, Content: {errorContent}");
-                        return $"Error communicating with API: {response.StatusCode}. Please try again later.";
+                        return "Could not extract response content from API response.";
                     }
-                    catch (Exception ex) when (attempt < maxRetries)
+                    catch (JsonException ex)
                     {
-                        // 如果不是最后一次尝试，捕获异常并重试
-                        Console.WriteLine($"API call attempt {attempt} failed: {ex.Message}");
-                        await Task.Delay(1000 * attempt); // 指数退避
+                        Console.WriteLine($"JSON parsing error: {ex.Message}");
+                        await _jsRuntime.InvokeVoidAsync("console.log", $"JSON parsing error: {ex.Message}");
+                        return $"Error parsing API response: {ex.Message}";
                     }
                 }
-                
-                // 如果所有尝试都失败
-                return "Sorry, I'm having trouble connecting to the server. Please check your connection and try again.";
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"API Error: {response.StatusCode}, Content: {errorContent}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"API Error: {response.StatusCode}, Content: {errorContent}");
+                    return $"Error: API返回错误状态码 {(int)response.StatusCode} {response.StatusCode}";
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error calling API: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Error calling API: {ex.Message}");
                 
                 if (ex.InnerException != null)
                 {
                     Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"Inner exception: {ex.InnerException.Message}");
                 }
                 
-                return "Sorry, there was a problem connecting to the chat service. Please try again later.";
+                return $"发生错误: {ex.Message}";
             }
         }
     }
