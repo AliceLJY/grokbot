@@ -22,6 +22,9 @@
                 <button class="btn btn-sm btn-outline-secondary" @onclick="RenameChat" disabled="@isProcessing">
                     <span class="oi oi-pencil"></span> Rename
                 </button>
+                <button class="btn btn-sm btn-outline-secondary ml-2" @onclick="NavigateToHome" disabled="@isProcessing">
+                    <span class="oi oi-home"></span> Home
+                </button>
             </div>
         </div>
 
@@ -76,9 +79,20 @@
     private string userInput = string.Empty;
     private bool isProcessing = false;
     private ElementReference messagesContainerRef;
+    private bool isGitHubPages;
+    private string basePath;
 
     protected override async Task OnInitializedAsync()
     {
+        // 检查是否在 GitHub Pages 环境
+        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        basePath = NavigationManager.BaseUri;
+        
+        // 记录重要信息到控制台
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatId: {ChatId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {basePath}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
+        
         await LoadChat();
     }
 
@@ -92,20 +106,43 @@
 
     private async Task LoadChat()
     {
-        if (ChatId == "new")
+        try
         {
-            currentChat = new Chat();
-            await ChatStorage.SaveChatAsync(currentChat);
-            NavigationManager.NavigateTo($"/chat/{currentChat.Id}", replace: true);
-        }
-        else
-        {
-            currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
-            
-            if (currentChat == null)
+            if (ChatId == "new")
             {
-                NavigationManager.NavigateTo("/");
+                currentChat = new Chat();
+                await ChatStorage.SaveChatAsync(currentChat);
+                
+                // 使用不同的导航方法取决于环境
+                string chatUrl = $"chat/{currentChat.Id}";
+                await JSRuntime.InvokeVoidAsync("console.log", $"Creating new chat with ID: {currentChat.Id}");
+                
+                if (isGitHubPages)
+                {
+                    // 在 GitHub Pages 上使用 JS 导航
+                    await JSRuntime.InvokeVoidAsync("window.location.href", basePath + chatUrl);
+                }
+                else
+                {
+                    // 在本地环境使用 NavigationManager
+                    NavigationManager.NavigateTo(chatUrl, replace: true);
+                }
             }
+            else
+            {
+                currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
+                
+                if (currentChat == null)
+                {
+                    await JSRuntime.InvokeVoidAsync("console.error", $"Could not find chat with ID: {ChatId}");
+                    NavigateToHome();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading chat: {ex.Message}");
+            NavigateToHome();
         }
     }
 
@@ -210,6 +247,28 @@
         {
             // Send on Enter, but allow Shift+Enter for new lines
             await SendMessage();
+        }
+    }
+    
+    private void NavigateToHome()
+    {
+        try
+        {
+            if (isGitHubPages)
+            {
+                // 在 GitHub Pages 环境使用JS导航
+                JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+            }
+            else
+            {
+                // 在本地环境直接导航
+                NavigationManager.NavigateTo("/");
+            }
+        }
+        catch
+        {
+            // 失败时的后备方法
+            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
         }
     }
 }
