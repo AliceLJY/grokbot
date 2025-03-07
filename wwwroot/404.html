@@ -9,14 +9,13 @@
     <link href="css/app.css" rel="stylesheet" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <script type="text/javascript">
-        // 立即执行重定向到主页
-        window.location.href = "/grokbot/";
+        // 简单重定向到主页
+        window.location.replace("/grokbot/");
     </script>
 </head>
 <body>
     <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column;">
         <h1>页面未找到</h1>
-        <p>您请求的页面不存在。</p>
         <p>正在重定向到首页...</p>
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">加载中...</span>
