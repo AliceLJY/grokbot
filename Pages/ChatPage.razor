@@ -90,6 +90,7 @@
         // 记录重要信息到控制台
         await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage初始化 - ChatId: {ChatId}");
         await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {NavigationManager.BaseUri}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"当前URI: {NavigationManager.Uri}");
         
         // 重要：在GitHub Pages环境中，确保URL格式正确
         if (isGitHubPages)
@@ -152,14 +153,25 @@
             else
             {
                 await JSRuntime.InvokeVoidAsync("console.log", $"已加载聊天: {currentChat.Id}, 消息数: {currentChat.Messages.Count}");
+                
+                // 输出聊天的所有消息，用于调试
+                for (int i = 0; i < currentChat.Messages.Count; i++)
+                {
+                    var message = currentChat.Messages[i];
+                    await JSRuntime.InvokeVoidAsync("console.log", $"消息 {i+1}: {message.Role} - {message.Content.Substring(0, Math.Min(50, message.Content.Length))}...");
+                }
             }
             
             // 通知UI更新
             StateHasChanged();
+            
+            // 确保渲染后滚动到底部
+            await Task.Delay(100);
+            await ScrollToBottom();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天时出错: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天时出错: {ex.Message}\n{ex.StackTrace}");
             
             // 创建新的聊天作为备用选项
             currentChat = new Chat 
