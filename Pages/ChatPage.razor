@@ -98,7 +98,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (ChatId != "new" && currentChat?.Id != ChatId)
+        if (currentChat?.Id != ChatId)
         {
             await LoadChat();
         }
@@ -108,35 +108,14 @@
     {
         try
         {
-            if (ChatId == "new")
+            // 直接获取聊天
+            currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
+            
+            // 如果聊天不存在，重定向到主页
+            if (currentChat == null)
             {
-                currentChat = new Chat();
-                await ChatStorage.SaveChatAsync(currentChat);
-                
-                // 使用不同的导航方法取决于环境
-                string chatUrl = $"chat/{currentChat.Id}";
-                await JSRuntime.InvokeVoidAsync("console.log", $"Creating new chat with ID: {currentChat.Id}");
-                
-                if (isGitHubPages)
-                {
-                    // 在 GitHub Pages 上使用 JS 导航
-                    await JSRuntime.InvokeVoidAsync("window.location.href", basePath + chatUrl);
-                }
-                else
-                {
-                    // 在本地环境使用 NavigationManager
-                    NavigationManager.NavigateTo(chatUrl, replace: true);
-                }
-            }
-            else
-            {
-                currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
-                
-                if (currentChat == null)
-                {
-                    await JSRuntime.InvokeVoidAsync("console.error", $"Could not find chat with ID: {ChatId}");
-                    NavigateToHome();
-                }
+                await JSRuntime.InvokeVoidAsync("console.error", $"Could not find chat with ID: {ChatId}");
+                NavigateToHome();
             }
         }
         catch (Exception ex)
@@ -257,7 +236,7 @@
             if (isGitHubPages)
             {
                 // 在 GitHub Pages 环境使用JS导航
-                JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+                JSRuntime.InvokeVoidAsync("window.location.replace", basePath);
             }
             else
             {
@@ -268,7 +247,7 @@
         catch
         {
             // 失败时的后备方法
-            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+            JSRuntime.InvokeVoidAsync("window.location.replace", basePath);
         }
     }
 }
