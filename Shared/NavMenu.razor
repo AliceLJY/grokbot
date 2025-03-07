@@ -1,6 +1,7 @@
 @namespace GrokBot.Shared
 @using GrokBot.Models
 @using GrokBot.Services
+@using System.Text.Json
 @inject ChatStorageService ChatStorage
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
@@ -77,7 +78,8 @@
         try
         {
             // 首先，确保聊天记录已保存到单独的聊天缓存中
-            await JSRuntime.InvokeVoidAsync("cacheChatForNavigation", chatId, JsonSerializer.Serialize(chat));
+            string chatJson = JsonSerializer.Serialize(chat);
+            await JSRuntime.InvokeVoidAsync("cacheChatForNavigation", chatId, chatJson);
             
             // 使用与聊天页面一致的导航方法，确保GitHub Pages环境下正常工作
             if (isGitHubPages)
