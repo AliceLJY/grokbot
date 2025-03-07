@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>GrokBot</title>
+    <base href="/grokbot/" />
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="GrokBot.styles.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css" integrity="sha512-UyNhw5RNpQaCai2EdC+Js0QL4RlVmiq41DkmCJsRV3ZxipG2L0HhTqIf/H9Hp8ez2EnFlkBnjRGJU2stW3Lj+w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+
+<body>
+    <div id="app">
+        <div class="loading-container">
+            <div class="loading-text">
+                <h1>GrokBot</h1>
+                <p>载入中...</p>
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        发生了一个未处理的错误。
+        <a href="" class="reload">重新加载</a>
+        <a class="dismiss">🗙</a>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        // 修复路由处理，避免404错误
+        window.addEventListener('load', function() {
+            // 监听所有链接点击，确保路由正确处理
+            document.addEventListener('click', function(e) {
+                // 检查是否点击了a标签
+                const anchor = e.target.closest('a');
+                if (!anchor) return;
+                
+                // 检查是否是内部链接
+                const href = anchor.getAttribute('href');
+                if (!href || href.startsWith('http') || href.startsWith('//') || href.startsWith('#')) return;
+                
+                console.log('捕获链接点击: ' + href);
+                
+                // 获取当前base路径
+                const base = document.querySelector('base').getAttribute('href') || '/';
+                
+                // 在GitHub Pages环境下重写链接
+                if (window.location.hostname.includes('github.io')) {
+                    e.preventDefault();
+                    const newHref = base + href.replace(/^\//, '');
+                    console.log('重写链接: ' + newHref);
+                    window.location.href = newHref;
+                }
+            });
+        });
+
+        // 保存/恢复聊天内容的功能增强
+        window.saveChatToLocalStorage = function(chatId, messages) {
+            try {
+                localStorage.setItem('chat_' + chatId, JSON.stringify(messages));
+                console.log('已保存聊天: ' + chatId);
+                return true;
+            } catch (e) {
+                console.error('保存聊天出错: ', e);
+                return false;
+            }
+        };
+
+        window.loadChatFromLocalStorage = function(chatId) {
+            try {
+                const data = localStorage.getItem('chat_' + chatId);
+                if (data) {
+                    console.log('已加载聊天: ' + chatId);
+                    return JSON.parse(data);
+                }
+                return null;
+            } catch (e) {
+                console.error('加载聊天出错: ', e);
+                return null;
+            }
+        };
+
+        // 修复ScrollToBottom功能
+        window.scrollToBottom = function(elementId) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.scrollTop = element.scrollHeight;
+                }
+            } catch (e) {
+                console.error('滚动到底部出错: ', e);
+            }
+        };
+    </script>
+</body>
+
+</html>
