@@ -42,7 +42,7 @@
 @code {
     private bool isProcessing = false;
 
-    // 直接在客户端创建聊天，而不是重定向到 "/chat/new"
+    // 直接在客户端创建聊天，修复重定向问题
     private async Task CreateNewChatDirectly()
     {
         if (isProcessing)
@@ -62,18 +62,33 @@
             // 记录新创建的聊天ID
             await JSRuntime.InvokeVoidAsync("console.log", $"Created chat with ID: {newChat.Id}");
             
-            // 导航到新创建的聊天
+            // 构建聊天URL
             string chatUrl = $"chat/{newChat.Id}";
             
             // 检查是否在 GitHub Pages 环境
             bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
             
+            // 使用routeHandler来处理导航，避免重定向循环
             if (isGitHubPages)
             {
-                // 在 GitHub Pages 上使用 window.location 导航
-                string fullUrl = NavigationManager.BaseUri + chatUrl;
-                await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to: {fullUrl}");
-                await JSRuntime.InvokeVoidAsync("window.location.replace", fullUrl);
+                // 避免使用window.location.replace，改用JS导航辅助函数
+                await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to: {chatUrl}");
+                await JSRuntime.InvokeVoidAsync("eval", $@"
+                    try {{
+                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
+                        var fullPath = baseHref + '{chatUrl}';
+                        console.log('Navigating to: ' + fullPath);
+                        
+                        // 使用history.pushState避免整页刷新导致的重定向循环
+                        history.pushState(null, '', fullPath);
+                        // 触发Blazor路由
+                        window.dispatchEvent(new Event('popstate'));
+                    }} catch(e) {{
+                        console.error('Navigation error:', e);
+                        // 备用方案
+                        window.location.href = '{chatUrl}';
+                    }}
+                ");
             }
             else
             {
@@ -85,6 +100,9 @@
         {
             await JSRuntime.InvokeVoidAsync("console.error", $"Error creating chat: {ex.Message}");
             await JSRuntime.InvokeVoidAsync("alert", "Error creating new chat. Please try again.");
+        }
+        finally
+        {
             isProcessing = false;
         }
     }
