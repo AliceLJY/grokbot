@@ -1,6 +1,9 @@
 @page "/"
+@using GrokBot.Models
+@using GrokBot.Services
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
+@inject ChatStorageService ChatStorage
 
 <div class="welcome-container">
     <div class="welcome-card">
@@ -29,7 +32,7 @@
         
         <div class="start-section">
             <h2>Ready to start chatting?</h2>
-            <button @onclick="StartNewChat" class="btn btn-primary start-btn">
+            <button @onclick="CreateNewChatDirectly" class="btn btn-primary start-btn">
                 <span class="oi oi-plus"></span> Start a New Chat
             </button>
         </div>
@@ -37,35 +40,52 @@
 </div>
 
 @code {
-    private async Task StartNewChat()
+    private bool isProcessing = false;
+
+    // 直接在客户端创建聊天，而不是重定向到 "/chat/new"
+    private async Task CreateNewChatDirectly()
     {
-        // 判断是否在 GitHub Pages 环境
-        bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
-        string basePath = NavigationManager.BaseUri;
+        if (isProcessing)
+            return;
+            
+        isProcessing = true;
         
-        try
+        try 
         {
-            // 记录导航路径
-            await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to chat/new from {basePath}");
+            // 记录开始创建聊天
+            await JSRuntime.InvokeVoidAsync("console.log", "Creating new chat directly");
+            
+            // 直接在这里创建聊天
+            var newChat = new Chat();
+            await ChatStorage.SaveChatAsync(newChat);
+            
+            // 记录新创建的聊天ID
+            await JSRuntime.InvokeVoidAsync("console.log", $"Created chat with ID: {newChat.Id}");
+            
+            // 导航到新创建的聊天
+            string chatUrl = $"chat/{newChat.Id}";
+            
+            // 检查是否在 GitHub Pages 环境
+            bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
             
             if (isGitHubPages)
             {
-                // 在 GitHub Pages 上使用 JS 导航以避免路由问题
-                await JSRuntime.InvokeVoidAsync("routeHandler.navigateTo", "chat/new");
+                // 在 GitHub Pages 上使用 window.location 导航
+                string fullUrl = NavigationManager.BaseUri + chatUrl;
+                await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to: {fullUrl}");
+                await JSRuntime.InvokeVoidAsync("window.location.replace", fullUrl);
             }
             else
             {
-                // 在本地开发环境使用正常导航
-                NavigationManager.NavigateTo("chat/new");
+                // 在本地环境使用 NavigationManager
+                NavigationManager.NavigateTo(chatUrl);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) 
         {
-            // 记录错误并尝试替代导航方法
-            await JSRuntime.InvokeVoidAsync("console.error", $"Navigation error: {ex.Message}");
-            
-            // 后备方法：直接设置窗口位置
-            await JSRuntime.InvokeVoidAsync("window.location.href", basePath + "chat/new");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error creating chat: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Error creating new chat. Please try again.");
+            isProcessing = false;
         }
     }
 }
