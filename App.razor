@@ -20,8 +20,8 @@
 </Router>
 
 @code {
-    private bool isGitHubPages;
-    private string basePath;
+    private bool isGitHubPages = false;
+    private string basePath = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -37,24 +37,24 @@
         NavigationManager.LocationChanged += HandleLocationChanged;
     }
 
-    private void HandleLocationChanged(object sender, LocationChangedEventArgs e)
+    private async void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        JSRuntime.InvokeVoidAsync("console.log", $"Navigation to: {e.Location}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Navigation to: {e.Location}");
         
         // 如果是 404 错误，重定向到主页
         if (isGitHubPages && e.Location.EndsWith("/404"))
         {
-            JSRuntime.InvokeVoidAsync("console.log", "检测到404错误，重定向到主页");
+            await JSRuntime.InvokeVoidAsync("console.log", "检测到404错误，重定向到主页");
             NavigationManager.NavigateTo("", forceLoad: true);
         }
     }
     
-    private void NavigateToHome()
+    private async void NavigateToHome()
     {
         if (isGitHubPages)
         {
             // GitHub Pages 环境下，直接使用绝对 URL 跳转
-            JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+            await JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
         }
         else
         {
