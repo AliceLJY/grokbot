@@ -22,7 +22,7 @@
                 <button class="btn btn-sm btn-outline-secondary" @onclick="RenameChat" disabled="@isProcessing">
                     <span class="oi oi-pencil"></span> Rename
                 </button>
-                <button class="btn btn-sm btn-outline-secondary ml-2" @onclick="GoToHome" disabled="@isProcessing">
+                <button class="btn btn-sm btn-outline-secondary ml-2" @onclick="NavigateToHome" disabled="@isProcessing">
                     <span class="oi oi-home"></span> Home
                 </button>
             </div>
@@ -79,39 +79,52 @@
     private string userInput = string.Empty;
     private bool isProcessing = false;
     private ElementReference messagesContainerRef;
+    private bool isGitHubPages;
+    private string basePath;
 
     protected override async Task OnInitializedAsync()
     {
-        // 极其简化的初始化逻辑
-        await JSRuntime.InvokeVoidAsync("console.log", $"聊天页面初始化，ID: {ChatId}");
+        // 检查是否在 GitHub Pages 环境
+        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        basePath = NavigationManager.BaseUri;
         
+        // 记录重要信息到控制台
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatId: {ChatId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {basePath}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
+        
+        await LoadChat();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (currentChat?.Id != ChatId)
+        {
+            await LoadChat();
+        }
+    }
+
+    private async Task LoadChat()
+    {
         try
         {
-            // 尝试加载聊天
+            // 直接获取聊天
             currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
             
-            // 如果聊天不存在，创建一个新聊天
+            // 如果聊天不存在，创建一个新聊天而不是重定向
             if (currentChat == null)
             {
-                await JSRuntime.InvokeVoidAsync("console.log", "聊天不存在，创建新聊天");
+                await JSRuntime.InvokeVoidAsync("console.log", $"找不到ID为 {ChatId} 的聊天，创建新聊天");
                 currentChat = new Chat { Id = ChatId };
                 await ChatStorage.SaveChatAsync(currentChat);
             }
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天出错: {ex.Message}");
-            // 在出错时也尝试创建新聊天
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading chat: {ex.Message}");
+            // 创建新的聊天，而不是返回主页
             currentChat = new Chat { Id = ChatId };
             await ChatStorage.SaveChatAsync(currentChat);
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && currentChat != null)
-        {
-            await ScrollToBottom();
         }
     }
 
@@ -120,12 +133,14 @@
         if (string.IsNullOrWhiteSpace(userInput) || isProcessing || currentChat == null)
             return;
 
-        // 存储消息内容并清空输入框
+        // Store the message content before clearing the input
         string messageContent = userInput.Trim();
+        
+        // Clear the input immediately to provide better UX
         userInput = string.Empty;
         StateHasChanged();
         
-        // 添加用户消息
+        // Add user message
         var userMessage = new Message
         {
             Role = "user",
@@ -135,7 +150,7 @@
         
         currentChat.Messages.Add(userMessage);
         
-        // 如果是第一条消息，设置聊天标题
+        // Update the chat title if it's the first message
         if (currentChat.Messages.Count == 1)
         {
             currentChat.Title = messageContent.Length > 30 
@@ -144,9 +159,11 @@
         }
         
         await ChatStorage.SaveChatAsync(currentChat);
+        
+        // Scroll to bottom
         await ScrollToBottom();
         
-        // 获取Grok的回复
+        // Get response from Grok
         isProcessing = true;
         StateHasChanged();
         
@@ -154,7 +171,7 @@
         {
             var response = await GrokService.GetChatResponseAsync(currentChat);
             
-            // 添加机器人回复
+            // Add bot response
             var botMessage = new Message
             {
                 Role = "assistant",
@@ -167,11 +184,11 @@
         }
         catch (Exception ex)
         {
-            // 添加错误消息
+            // Add error message
             var errorMessage = new Message
             {
                 Role = "assistant",
-                Content = $"抱歉，发生错误: {ex.Message}",
+                Content = $"Sorry, there was an error: {ex.Message}",
                 Timestamp = DateTime.Now
             };
             
@@ -188,7 +205,7 @@
 
     private async Task ScrollToBottom()
     {
-        await Task.Delay(50); // 短暂延迟确保DOM更新
+        await Task.Delay(50); // Small delay to ensure DOM update
         await JSRuntime.InvokeVoidAsync("scrollToBottom", messagesContainerRef);
     }
 
@@ -210,14 +227,38 @@
     {
         if (e.Key == "Enter" && !e.ShiftKey)
         {
-            // 按Enter发送，Shift+Enter换行
+            // Send on Enter, but allow Shift+Enter for new lines
             await SendMessage();
         }
     }
     
-    // 极简的返回主页方法
-    private void GoToHome()
+    private void NavigateToHome()
     {
-        JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+        try
+        {
+            if (isGitHubPages)
+            {
+                JSRuntime.InvokeVoidAsync("eval", @"
+                    try {
+                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
+                        console.log('导航到首页, 基础路径:', baseHref);
+                        window.location.href = baseHref;
+                    } catch(e) {
+                        console.error('导航错误:', e);
+                        window.location.href = '/grokbot/';
+                    }
+                ");
+            }
+            else
+            {
+                // 在本地环境直接导航
+                NavigationManager.NavigateTo("/");
+            }
+        }
+        catch
+        {
+            // 失败时的后备方法
+            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+        }
     }
 }
