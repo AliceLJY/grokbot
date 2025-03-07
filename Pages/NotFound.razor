@@ -1,0 +1,42 @@
+@page "/404"
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card mt-5">
+                <div class="card-body text-center">
+                    <h1 class="display-1">404</h1>
+                    <h3 class="card-title">页面未找到</h3>
+                    <p class="card-text">抱歉，您请求的页面不存在。</p>
+                    <button class="btn btn-primary" @onclick="NavigateToHome">返回首页</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isGitHubPages => NavigationManager.BaseUri.Contains("github.io");
+
+    private async Task NavigateToHome()
+    {
+        if (isGitHubPages)
+        {
+            // GitHub Pages 环境
+            await JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+        }
+        else
+        {
+            // 本地环境
+            NavigationManager.NavigateTo("/");
+        }
+    }
+}
+
+<style>
+    .container {
+        margin-top: 50px;
+    }
+</style>
