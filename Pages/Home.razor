@@ -32,12 +32,8 @@
         
         <div class="start-section">
             <h2>Ready to start chatting?</h2>
-            <button @onclick="CreateNewChat" class="btn btn-primary start-btn" disabled="@isProcessing">
+            <button @onclick="CreateNewChatDirectly" class="btn btn-primary start-btn">
                 <span class="oi oi-plus"></span> Start a New Chat
-                @if (isProcessing)
-                {
-                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"></span>
-                }
             </button>
         </div>
     </div>
@@ -48,13 +44,13 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // 清除可能的旧会话状态
-        await JSRuntime.InvokeVoidAsync("sessionStorage.clear");
-        await JSRuntime.InvokeVoidAsync("console.log", "首页初始化，已清除会话状态");
+        // 判断是否在 GitHub Pages 环境
+        bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
     }
 
-    // 完全简化的创建聊天方法
-    private async Task CreateNewChat()
+    // 直接在客户端创建聊天，而不是重定向到 "/chat/new"
+    private async Task CreateNewChatDirectly()
     {
         if (isProcessing)
             return;
@@ -64,25 +60,43 @@
         try 
         {
             // 记录开始创建聊天
-            await JSRuntime.InvokeVoidAsync("console.log", "创建新聊天开始");
+            await JSRuntime.InvokeVoidAsync("console.log", "Creating new chat directly");
             
             // 直接在这里创建聊天
             var newChat = new Chat();
             await ChatStorage.SaveChatAsync(newChat);
             
             // 记录新创建的聊天ID
-            var chatId = newChat.Id;
-            await JSRuntime.InvokeVoidAsync("console.log", $"已创建聊天，ID: {chatId}");
+            await JSRuntime.InvokeVoidAsync("console.log", $"Created chat with ID: {newChat.Id}");
             
-            // 使用最简单直接的导航方式
-            await JSRuntime.InvokeVoidAsync("eval", $@"
-                window.location.href = '/grokbot/chat/{chatId}';
-            ");
+            // 导航到新创建的聊天
+            string chatUrl = $"chat/{newChat.Id}";
+            
+            // 检查是否在 GitHub Pages 环境
+            bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+            
+            if (isGitHubPages)
+            {
+                // 在 GitHub Pages 上使用全URL导航
+                await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to chat: {chatUrl}");
+                
+                string baseHref = "/grokbot/";
+                string fullUrl = baseHref + chatUrl;
+                await JSRuntime.InvokeVoidAsync("console.log", $"Full URL: {fullUrl}");
+                
+                // 使用直接导航
+                await JSRuntime.InvokeVoidAsync("window.location.href = $0", fullUrl);
+            }
+            else
+            {
+                // 在本地环境使用 NavigationManager
+                NavigationManager.NavigateTo(chatUrl);
+            }
         }
         catch (Exception ex) 
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"创建聊天时出错: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", "创建新聊天时出错。请重试。");
+            await JSRuntime.InvokeVoidAsync("console.error", $"Error creating chat: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", "Error creating new chat. Please try again.");
             isProcessing = false;
         }
     }
