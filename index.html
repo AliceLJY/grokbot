@@ -31,31 +31,64 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
-        // 修复路由处理，避免404错误
+        // 在页面加载时处理SPA路由问题
         window.addEventListener('load', function() {
-            // 监听所有链接点击，确保路由正确处理
-            document.addEventListener('click', function(e) {
-                // 检查是否点击了a标签
-                const anchor = e.target.closest('a');
-                if (!anchor) return;
+            console.log('页面加载完成，初始化路由增强...');
+            
+            // 添加GitHub Pages的路由支持
+            if (window.location.hostname.includes('github.io')) {
+                // 如果当前在GitHub Pages并且页面被刷新（非Blazor导航）
+                console.log('在GitHub Pages环境中运行');
                 
-                // 检查是否是内部链接
-                const href = anchor.getAttribute('href');
-                if (!href || href.startsWith('http') || href.startsWith('//') || href.startsWith('#')) return;
+                // 获取当前URL路径
+                var path = window.location.pathname;
+                console.log('当前路径:', path);
                 
-                console.log('捕获链接点击: ' + href);
+                // 检查是否是聊天页面路径的格式，但可能被截断
+                // 例如 /grokbot/chat/123 可能被GitHub Pages返回404并重定向到 /grokbot/
+                var baseHref = document.querySelector('base').getAttribute('href');
+                console.log('Base Href:', baseHref);
                 
-                // 获取当前base路径
-                const base = document.querySelector('base').getAttribute('href') || '/';
-                
-                // 在GitHub Pages环境下重写链接
-                if (window.location.hostname.includes('github.io')) {
-                    e.preventDefault();
-                    const newHref = base + href.replace(/^\//, '');
-                    console.log('重写链接: ' + newHref);
-                    window.location.href = newHref;
+                // 在会话存储中检查是否有保存的聊天URL
+                var savedChatUrl = sessionStorage.getItem('currentChatUrl');
+                if (savedChatUrl) {
+                    console.log('找到保存的聊天URL:', savedChatUrl);
+                    
+                    // 如果被重定向到了根路径，但有保存的聊天URL，则恢复到那个URL
+                    if (path === baseHref || path === baseHref.slice(0, -1)) {
+                        console.log('检测到可能的重定向，正在恢复聊天URL');
+                        // 保持URL但不要移除，因为如果导航失败，我们需要再次尝试
+                        window.location.href = savedChatUrl;
+                    }
                 }
-            });
+            }
+            
+            // 每次加载时自动显示调试信息
+            window.showDebugInfo();
+        });
+        
+        // 修复特殊处理所有 a 标签的点击事件
+        document.addEventListener('click', function(e) {
+            // 检查是否点击了a标签
+            const anchor = e.target.closest('a');
+            if (!anchor) return;
+            
+            // 检查是否是内部链接
+            const href = anchor.getAttribute('href');
+            if (!href || href.startsWith('http') || href.startsWith('//') || href.startsWith('#')) return;
+            
+            console.log('捕获链接点击: ' + href);
+            
+            // 获取当前base路径
+            const base = document.querySelector('base').getAttribute('href') || '/';
+            
+            // 在GitHub Pages环境下重写链接
+            if (window.location.hostname.includes('github.io')) {
+                e.preventDefault();
+                const newHref = base + href.replace(/^\//, '');
+                console.log('重写链接: ' + newHref);
+                window.location.href = newHref;
+            }
         });
 
         // 保存/恢复聊天内容的功能增强
@@ -83,18 +116,56 @@
                 return null;
             }
         };
+        
+        // 调试信息 - 显示当前路径和本地存储信息
+        window.showDebugInfo = function() {
+            console.log('---- 调试信息 ----');
+            console.log('当前URL:', window.location.href);
+            console.log('基础路径:', document.querySelector('base').getAttribute('href'));
+            
+            // 显示所有会话存储
+            console.log('会话存储:');
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                console.log(`  ${key}: ${sessionStorage.getItem(key)}`);
+            }
+            
+            // 显示所有聊天相关本地存储
+            console.log('聊天存储:');
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('chat_')) {
+                    const chatId = key.replace('chat_', '');
+                    console.log(`  ${chatId}: 消息数=${JSON.parse(localStorage.getItem(key)).length || 0}`);
+                }
+            }
+            
+            console.log('---------------');
+        };
 
         // 修复ScrollToBottom功能
         window.scrollToBottom = function(elementId) {
             try {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.scrollTop = element.scrollHeight;
+                if (typeof elementId === 'object') {
+                    // 如果传入的是ElementReference
+                    elementId.scrollTop = elementId.scrollHeight;
+                } else {
+                    // 如果传入的是ID字符串
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.scrollTop = element.scrollHeight;
+                    }
                 }
             } catch (e) {
                 console.error('滚动到底部出错: ', e);
             }
         };
+        
+        // 如果检测到是聊天页面，设置URL
+        if (window.location.pathname.includes('/chat/')) {
+            console.log('检测到聊天页面, 保存URL到会话存储');
+            sessionStorage.setItem('currentChatUrl', window.location.href);
+        }
     </script>
 </body>
 
