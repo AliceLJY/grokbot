@@ -80,26 +80,48 @@
     private bool isProcessing = false;
     private ElementReference messagesContainerRef;
     private bool isGitHubPages;
-    private string basePath;
+    private bool isLoaded = false;
 
     protected override async Task OnInitializedAsync()
     {
         // 检查是否在 GitHub Pages 环境
         isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
-        basePath = NavigationManager.BaseUri;
         
         // 记录重要信息到控制台
-        await JSRuntime.InvokeVoidAsync("console.log", $"ChatId: {ChatId}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {basePath}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage初始化 - ChatId: {ChatId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {NavigationManager.BaseUri}");
         
+        // 重要：在GitHub Pages环境中，确保URL格式正确
+        if (isGitHubPages)
+        {
+            // 在初始化时保存当前URL，以便在需要时进行参考
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "currentChatUrl", NavigationManager.Uri);
+            await JSRuntime.InvokeVoidAsync("console.log", $"已保存当前URL到会话存储: {NavigationManager.Uri}");
+        }
+        
+        // 加载聊天数据
         await LoadChat();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && currentChat != null)
+        {
+            // 第一次渲染后滚动到底部
+            await ScrollToBottom();
+            
+            // 标记已完成加载
+            isLoaded = true;
+            await JSRuntime.InvokeVoidAsync("console.log", "聊天页面完成初始渲染");
+        }
+    }
+    
     protected override async Task OnParametersSetAsync()
     {
-        if (currentChat?.Id != ChatId)
+        // 当参数(ChatId)变化时重新加载聊天
+        if (isLoaded && currentChat?.Id != ChatId)
         {
+            await JSRuntime.InvokeVoidAsync("console.log", $"ChatId变更: {currentChat?.Id} -> {ChatId}");
             await LoadChat();
         }
     }
@@ -108,23 +130,47 @@
     {
         try
         {
-            // 直接获取聊天
+            await JSRuntime.InvokeVoidAsync("console.log", $"正在加载聊天: {ChatId}");
+            
+            // 尝试加载聊天
             currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
             
-            // 如果聊天不存在，创建一个新聊天而不是重定向
             if (currentChat == null)
             {
                 await JSRuntime.InvokeVoidAsync("console.log", $"找不到ID为 {ChatId} 的聊天，创建新聊天");
-                currentChat = new Chat { Id = ChatId };
+                
+                // 创建新聊天
+                currentChat = new Chat 
+                { 
+                    Id = ChatId,
+                    Title = "New Chat" 
+                };
+                
                 await ChatStorage.SaveChatAsync(currentChat);
+                await JSRuntime.InvokeVoidAsync("console.log", $"已创建新聊天: {currentChat.Id}");
             }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", $"已加载聊天: {currentChat.Id}, 消息数: {currentChat.Messages.Count}");
+            }
+            
+            // 通知UI更新
+            StateHasChanged();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading chat: {ex.Message}");
-            // 创建新的聊天，而不是返回主页
-            currentChat = new Chat { Id = ChatId };
+            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天时出错: {ex.Message}");
+            
+            // 创建新的聊天作为备用选项
+            currentChat = new Chat 
+            { 
+                Id = ChatId,
+                Title = "New Chat" 
+            };
             await ChatStorage.SaveChatAsync(currentChat);
+            
+            // 通知UI更新
+            StateHasChanged();
         }
     }
 
@@ -133,14 +179,12 @@
         if (string.IsNullOrWhiteSpace(userInput) || isProcessing || currentChat == null)
             return;
 
-        // Store the message content before clearing the input
+        // 保存消息内容并清空输入框
         string messageContent = userInput.Trim();
-        
-        // Clear the input immediately to provide better UX
         userInput = string.Empty;
         StateHasChanged();
         
-        // Add user message
+        // 添加用户消息
         var userMessage = new Message
         {
             Role = "user",
@@ -150,20 +194,19 @@
         
         currentChat.Messages.Add(userMessage);
         
-        // Update the chat title if it's the first message
-        if (currentChat.Messages.Count == 1)
+        // 如果是第一条消息，设置聊天标题
+        if (currentChat.Messages.Count == 1 || currentChat.Title == "New Chat")
         {
             currentChat.Title = messageContent.Length > 30 
                 ? messageContent.Substring(0, 27) + "..." 
                 : messageContent;
         }
         
+        // 保存聊天记录
         await ChatStorage.SaveChatAsync(currentChat);
-        
-        // Scroll to bottom
         await ScrollToBottom();
         
-        // Get response from Grok
+        // 获取Grok的回复
         isProcessing = true;
         StateHasChanged();
         
@@ -171,7 +214,7 @@
         {
             var response = await GrokService.GetChatResponseAsync(currentChat);
             
-            // Add bot response
+            // 添加机器人回复
             var botMessage = new Message
             {
                 Role = "assistant",
@@ -184,11 +227,11 @@
         }
         catch (Exception ex)
         {
-            // Add error message
+            // 添加错误消息
             var errorMessage = new Message
             {
                 Role = "assistant",
-                Content = $"Sorry, there was an error: {ex.Message}",
+                Content = $"抱歉，发生错误: {ex.Message}",
                 Timestamp = DateTime.Now
             };
             
@@ -205,7 +248,8 @@
 
     private async Task ScrollToBottom()
     {
-        await Task.Delay(50); // Small delay to ensure DOM update
+        // 延迟确保DOM更新
+        await Task.Delay(50); 
         await JSRuntime.InvokeVoidAsync("scrollToBottom", messagesContainerRef);
     }
 
@@ -214,7 +258,7 @@
         if (currentChat == null)
             return;
             
-        var newTitle = await JSRuntime.InvokeAsync<string>("prompt", "Enter new chat title:", currentChat.Title);
+        var newTitle = await JSRuntime.InvokeAsync<string>("prompt", "输入新的聊天标题:", currentChat.Title);
         
         if (!string.IsNullOrWhiteSpace(newTitle))
         {
@@ -227,7 +271,7 @@
     {
         if (e.Key == "Enter" && !e.ShiftKey)
         {
-            // Send on Enter, but allow Shift+Enter for new lines
+            // 按Enter发送，Shift+Enter换行
             await SendMessage();
         }
     }
@@ -238,27 +282,35 @@
         {
             if (isGitHubPages)
             {
+                // 在GitHub Pages环境使用硬导航
                 JSRuntime.InvokeVoidAsync("eval", @"
                     try {
+                        // 清除会话存储中的当前URL
+                        sessionStorage.removeItem('currentChatUrl');
+                        
+                        // 获取基础路径
                         var baseHref = document.querySelector('base').getAttribute('href') || '/';
                         console.log('导航到首页, 基础路径:', baseHref);
+                        
+                        // 使用硬导航以确保清除状态
                         window.location.href = baseHref;
                     } catch(e) {
                         console.error('导航错误:', e);
+                        // 最终后备方案
                         window.location.href = '/grokbot/';
                     }
                 ");
             }
             else
             {
-                // 在本地环境直接导航
-                NavigationManager.NavigateTo("/");
+                // 本地环境使用强制刷新
+                NavigationManager.NavigateTo("/", forceLoad: true);
             }
         }
         catch
         {
-            // 失败时的后备方法
-            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+            // 最终后备方案
+            JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
         }
     }
 }
