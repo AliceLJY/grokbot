@@ -81,6 +81,59 @@ window.appHelpers = {
     }
 };
 
+// 路由处理辅助函数
+window.routeHandler = {
+    // 导航到指定路径
+    navigateTo: function(path) {
+        try {
+            var base = document.querySelector('base').getAttribute('href');
+            var currentUrl = window.location.origin + base;
+            var newUrl = new URL(path, currentUrl);
+            
+            console.log('Navigating to:', newUrl.href);
+            window.location.href = newUrl.href;
+            return true;
+        } catch (e) {
+            console.error('Navigation error:', e);
+            return false;
+        }
+    },
+    
+    // 防止循环重定向
+    redirectCount: 0,
+    
+    // 安全导航，防止循环重定向
+    safeNavigate: function(path, maxRedirects = 3) {
+        // 如果检测到太多重定向，返回主页
+        if (this.redirectCount >= maxRedirects) {
+            console.error('Too many redirects detected, returning to home page');
+            this.redirectCount = 0;
+            window.location.replace(window.location.origin + document.querySelector('base').getAttribute('href'));
+            return false;
+        }
+        
+        this.redirectCount++;
+        this.navigateTo(path);
+        
+        // 设置一个定时器，在一段时间后重置重定向计数器
+        setTimeout(() => {
+            this.redirectCount = 0;
+        }, 5000);
+        
+        return true;
+    },
+    
+    // 处理导航错误
+    handleNavigationError: function() {
+        if (window.location.pathname.includes('/chat/new')) {
+            console.error('Detected navigation to /chat/new, which should be handled on the client');
+            window.location.replace(window.location.origin + document.querySelector('base').getAttribute('href'));
+            return true;
+        }
+        return false;
+    }
+};
+
 // 初始化
 (function() {
     // 触发一次浏览器支持检查
@@ -99,6 +152,9 @@ window.appHelpers = {
         console.warn('Storage usage is high, clearing automatically');
         window.appHelpers.clearStorage();
     }
+    
+    // 处理导航错误
+    window.routeHandler.handleNavigationError();
     
     console.info('GrokBot app helpers initialized');
 })();
