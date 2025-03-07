@@ -133,7 +133,35 @@
         {
             await JSRuntime.InvokeVoidAsync("console.log", $"正在加载聊天: {ChatId}");
             
-            // 尝试加载聊天
+            // 首先尝试从导航缓存中获取聊天
+            var cachedChatJson = await JSRuntime.InvokeAsync<string>("getCachedChat", ChatId);
+            if (!string.IsNullOrEmpty(cachedChatJson))
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", "从导航缓存中加载聊天");
+                
+                try
+                {
+                    currentChat = JsonSerializer.Deserialize<Chat>(cachedChatJson);
+                    
+                    if (currentChat != null)
+                    {
+                        await JSRuntime.InvokeVoidAsync("console.log", $"成功从缓存加载聊天: {currentChat.Id}, 消息数: {currentChat.Messages.Count}");
+                        
+                        // 确保我们将缓存的聊天保存到存储服务中
+                        await ChatStorage.SaveChatAsync(currentChat);
+                        
+                        // 通知UI更新
+                        StateHasChanged();
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await JSRuntime.InvokeVoidAsync("console.error", $"从缓存解析聊天时出错: {ex.Message}");
+                }
+            }
+            
+            // 如果从缓存加载失败，从存储服务加载
             currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
             
             if (currentChat == null)
