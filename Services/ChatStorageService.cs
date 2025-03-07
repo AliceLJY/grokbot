@@ -12,8 +12,8 @@ namespace GrokBot.Services
     {
         private readonly IJSRuntime _jsRuntime;
         private const string CHATS_KEY = "grokbot_chats";
-        private const int MAX_STORED_CHATS = 10; // 限制存储的聊天数量
-        private const int MAX_MESSAGES_PER_CHAT = 20; // 限制每个聊天的消息数量
+        private const int MAX_STORED_CHATS = 5; // 严格限制存储的聊天数量
+        private const int MAX_MESSAGES_PER_CHAT = 10; // 限制每个聊天的消息数量
 
         public ChatStorageService(IJSRuntime jsRuntime)
         {
@@ -24,15 +24,29 @@ namespace GrokBot.Services
         {
             try
             {
+                // 尝试读取存储数据
                 var json = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", CHATS_KEY);
                 if (string.IsNullOrEmpty(json))
                     return new List<Chat>();
 
-                return JsonSerializer.Deserialize<List<Chat>>(json) ?? new List<Chat>();
+                // 控制台记录存储大小以便调试
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Storage size: {json.Length} bytes");
+                
+                try
+                {
+                    return JsonSerializer.Deserialize<List<Chat>>(json) ?? new List<Chat>();
+                }
+                catch (JsonException ex)
+                {
+                    // 如果解析失败，清除存储并返回空列表
+                    await _jsRuntime.InvokeVoidAsync("console.error", $"JSON parsing error: {ex.Message}");
+                    await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CHATS_KEY);
+                    return new List<Chat>();
+                }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error loading chats: {ex.Message}");
+                await _jsRuntime.InvokeVoidAsync("console.error", $"Error loading chats: {ex.Message}");
                 return new List<Chat>();
             }
         }
@@ -41,7 +55,20 @@ namespace GrokBot.Services
         {
             try
             {
+                // 获取所有聊天
                 var chats = await GetAllChatsAsync();
+                
+                // 限制消息数量，仅保留最新的N条
+                if (chat.Messages.Count > MAX_MESSAGES_PER_CHAT)
+                {
+                    chat.Messages = chat.Messages
+                        .Skip(chat.Messages.Count - MAX_MESSAGES_PER_CHAT)
+                        .Take(MAX_MESSAGES_PER_CHAT)
+                        .ToList();
+                    
+                    await _jsRuntime.InvokeVoidAsync("console.log", 
+                        $"Truncated chat messages to {chat.Messages.Count} messages");
+                }
                 
                 // 检查是否已存在此聊天
                 var existingChat = chats.FirstOrDefault(c => c.Id == chat.Id);
@@ -57,31 +84,46 @@ namespace GrokBot.Services
                     chats.Add(chat);
                 }
                 
-                // 限制消息数量，仅保留最新的N条
-                if (chat.Messages.Count > MAX_MESSAGES_PER_CHAT)
-                {
-                    chat.Messages = chat.Messages.GetRange(
-                        chat.Messages.Count - MAX_MESSAGES_PER_CHAT, 
-                        MAX_MESSAGES_PER_CHAT);
-                }
-                
                 // 仅保留最新的N个聊天记录
                 if (chats.Count > MAX_STORED_CHATS)
                 {
-                    chats = chats.OrderByDescending(c => 
-                        c.Messages.Count > 0 ? 
-                        c.Messages.Max(m => m.Timestamp) : 
-                        DateTime.MinValue)
+                    var sortedChats = chats
+                        .OrderByDescending(c => 
+                            c.Messages.Count > 0 ? 
+                            c.Messages.Max(m => m.Timestamp) : 
+                            DateTime.MinValue)
                         .Take(MAX_STORED_CHATS)
                         .ToList();
+                    
+                    chats = sortedChats;
+                    await _jsRuntime.InvokeVoidAsync("console.log", 
+                        $"Truncated chats to {chats.Count} chats");
                 }
                 
+                // 序列化并保存
                 var json = JsonSerializer.Serialize(chats);
+                
+                // 检查存储大小，记录到控制台
+                await _jsRuntime.InvokeVoidAsync("console.log", $"Storing {json.Length} bytes to localStorage");
+                
+                // 如果数据太大，清除存储
+                if (json.Length > 2000000) // 2MB 限制
+                {
+                    await _jsRuntime.InvokeVoidAsync("console.warn", "Storage size exceeds 2MB, clearing all chats");
+                    await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CHATS_KEY);
+                    
+                    // 只保存当前聊天
+                    var singleChatJson = JsonSerializer.Serialize(new List<Chat> { chat });
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CHATS_KEY, singleChatJson);
+                    return;
+                }
+                
+                // 保存到本地存储
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CHATS_KEY, json);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error saving chat: {ex.Message}");
+                await _jsRuntime.InvokeVoidAsync("console.error", $"Error saving chat: {ex.Message}");
                 
                 // 如果保存失败，尝试清除存储并重新保存单个聊天
                 try
@@ -91,9 +133,10 @@ namespace GrokBot.Services
                     var json = JsonSerializer.Serialize(newList);
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CHATS_KEY, json);
                 }
-                catch
+                catch (Exception clearEx)
                 {
-                    // 如果仍然失败，只能放弃保存
+                    await _jsRuntime.InvokeVoidAsync("console.error", 
+                        $"Failed to clear and save chat: {clearEx.Message}");
                 }
             }
         }
@@ -106,14 +149,33 @@ namespace GrokBot.Services
 
         public async Task DeleteChatAsync(string id)
         {
-            var chats = await GetAllChatsAsync();
-            var chatToRemove = chats.FirstOrDefault(c => c.Id == id);
-            
-            if (chatToRemove != null)
+            try
             {
-                chats.Remove(chatToRemove);
-                var json = JsonSerializer.Serialize(chats);
-                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CHATS_KEY, json);
+                var chats = await GetAllChatsAsync();
+                var chatToRemove = chats.FirstOrDefault(c => c.Id == id);
+                
+                if (chatToRemove != null)
+                {
+                    chats.Remove(chatToRemove);
+                    var json = JsonSerializer.Serialize(chats);
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", CHATS_KEY, json);
+                }
+            }
+            catch (Exception ex)
+            {
+                await _jsRuntime.InvokeVoidAsync("console.error", $"Error deleting chat: {ex.Message}");
+            }
+        }
+        
+        public async Task ClearAllChatsAsync()
+        {
+            try
+            {
+                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", CHATS_KEY);
+            }
+            catch (Exception ex)
+            {
+                await _jsRuntime.InvokeVoidAsync("console.error", $"Error clearing chats: {ex.Message}");
             }
         }
     }
