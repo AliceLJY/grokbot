@@ -31,6 +31,76 @@
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
+        // 为每个聊天ID单独设置会话存储缓存
+        window.cacheChatForNavigation = function(chatId, chatJson) {
+            if (!chatId || !chatJson) {
+                console.error('无效的聊天ID或数据');
+                return false;
+            }
+            
+            try {
+                sessionStorage.setItem('chat_cache_' + chatId, chatJson);
+                console.log(`已缓存聊天 ${chatId} 到会话存储`);
+                return true;
+            } catch (e) {
+                console.error('缓存聊天出错:', e);
+                return false;
+            }
+        };
+        
+        // 获取聊天缓存
+        window.getCachedChat = function(chatId) {
+            if (!chatId) return null;
+            
+            try {
+                const cachedChat = sessionStorage.getItem('chat_cache_' + chatId);
+                if (cachedChat) {
+                    console.log(`从会话存储中获取聊天缓存 ${chatId}`);
+                }
+                return cachedChat;
+            } catch (e) {
+                console.error('获取聊天缓存出错:', e);
+                return null;
+            }
+        };
+        
+        // 导航到聊天页面的专用函数
+        window.navigateToChat = function(chatId) {
+            if (!chatId) {
+                console.error('无效的聊天ID');
+                return;
+            }
+            
+            try {
+                // 获取基础路径
+                const baseHref = document.querySelector('base').getAttribute('href') || '/';
+                const baseUrl = baseHref.endsWith('/') ? baseHref : baseHref + '/';
+                
+                // 记录详细日志
+                console.log('导航到聊天，基础路径:', baseUrl);
+                console.log('聊天ID:', chatId);
+                
+                // 构建完整URL
+                const chatUrl = baseUrl + 'chat/' + chatId;
+                console.log('完整URL:', chatUrl);
+                
+                // 记录导航前URL
+                console.log('当前URL:', window.location.href);
+                
+                // 使用硬导航确保页面刷新
+                window.location.href = chatUrl;
+            } catch(e) {
+                console.error('导航到聊天出错:', e);
+                
+                // 后备方案
+                if (window.location.hostname.includes('github.io')) {
+                    window.location.href = '/grokbot/chat/' + chatId;
+                } else {
+                    window.location.href = '/chat/' + chatId;
+                }
+            }
+        };
+        
         // 在页面加载时处理SPA路由问题
         window.addEventListener('load', function() {
             console.log('页面加载完成，初始化路由增强...');
@@ -127,7 +197,7 @@
             console.log('会话存储:');
             for (let i = 0; i < sessionStorage.length; i++) {
                 const key = sessionStorage.key(i);
-                console.log(`  ${key}: ${sessionStorage.getItem(key)}`);
+                console.log(`  ${key}: ${sessionStorage.getItem(key).substring(0, 50)}...`);
             }
             
             // 显示所有聊天相关本地存储
@@ -136,7 +206,8 @@
                 const key = localStorage.key(i);
                 if (key.startsWith('chat_')) {
                     const chatId = key.replace('chat_', '');
-                    console.log(`  ${chatId}: 消息数=${JSON.parse(localStorage.getItem(key)).length || 0}`);
+                    const data = JSON.parse(localStorage.getItem(key));
+                    console.log(`  ${chatId}: 消息数=${data.length || 0}`);
                 }
             }
             
@@ -165,6 +236,15 @@
         if (window.location.pathname.includes('/chat/')) {
             console.log('检测到聊天页面, 保存URL到会话存储');
             sessionStorage.setItem('currentChatUrl', window.location.href);
+            
+            // 提取聊天ID并尝试记录
+            try {
+                const pathParts = window.location.pathname.split('/');
+                const chatId = pathParts[pathParts.length - 1];
+                console.log('检测到聊天ID:', chatId);
+            } catch (e) {
+                console.error('无法提取聊天ID:', e);
+            }
         }
     </script>
 </body>
