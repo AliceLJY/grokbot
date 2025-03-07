@@ -1,3 +1,5 @@
-This file is used to trigger a GitHub Actions workflow run.
-Timestamp: 2025-03-07T17:55:00Z
-Fix for redirect loop issues.
+# 触发部署
+此文件用于触发GitHub Actions部署流程
+
+上次更新: 2025-03-07
+修复了导航问题和重定向循环
