@@ -1,4 +1,6 @@
 @page "/"
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <div class="welcome-container">
     <div class="welcome-card">
@@ -27,12 +29,46 @@
         
         <div class="start-section">
             <h2>Ready to start chatting?</h2>
-            <a href="/chat/new" class="btn btn-primary start-btn">
+            <button @onclick="StartNewChat" class="btn btn-primary start-btn">
                 <span class="oi oi-plus"></span> Start a New Chat
-            </a>
+            </button>
         </div>
     </div>
 </div>
+
+@code {
+    private async Task StartNewChat()
+    {
+        // 判断是否在 GitHub Pages 环境
+        bool isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        string basePath = NavigationManager.BaseUri;
+        
+        try
+        {
+            // 记录导航路径
+            await JSRuntime.InvokeVoidAsync("console.log", $"Navigating to chat/new from {basePath}");
+            
+            if (isGitHubPages)
+            {
+                // 在 GitHub Pages 上使用 JS 导航以避免路由问题
+                await JSRuntime.InvokeVoidAsync("routeHandler.navigateTo", "chat/new");
+            }
+            else
+            {
+                // 在本地开发环境使用正常导航
+                NavigationManager.NavigateTo("chat/new");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 记录错误并尝试替代导航方法
+            await JSRuntime.InvokeVoidAsync("console.error", $"Navigation error: {ex.Message}");
+            
+            // 后备方法：直接设置窗口位置
+            await JSRuntime.InvokeVoidAsync("window.location.href", basePath + "chat/new");
+        }
+    }
+}
 
 <style>
     .welcome-container {
