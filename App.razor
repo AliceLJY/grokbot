@@ -1,5 +1,6 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
@@ -12,21 +13,58 @@
             <div class="alert alert-warning">
                 <h3>页面未找到</h3>
                 <p>抱歉，找不到请求的页面。</p>
-                <button class="btn btn-primary" @onclick="GoHome">返回首页</button>
+                <button class="btn btn-primary" @onclick="NavigateToHome">返回首页</button>
             </div>
         </LayoutView>
     </NotFound>
 </Router>
 
 @code {
+    private bool isGitHubPages;
+    private string basePath;
+
     protected override async Task OnInitializedAsync()
     {
-        await JSRuntime.InvokeVoidAsync("console.log", "App 组件已初始化");
+        await JSRuntime.InvokeVoidAsync("console.log", "App initialized");
+        
+        // 判断是否在 GitHub Pages 环境
+        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        basePath = NavigationManager.BaseUri;
+
+        await JSRuntime.InvokeVoidAsync("console.log", $"Base URI: {NavigationManager.BaseUri}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
+        
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object sender, LocationChangedEventArgs e)
+    {
+        JSRuntime.InvokeVoidAsync("console.log", $"Navigation to: {e.Location}");
+        
+        // 如果是 404 错误，重定向到主页
+        if (isGitHubPages && e.Location.EndsWith("/404"))
+        {
+            JSRuntime.InvokeVoidAsync("console.log", "检测到404错误，重定向到主页");
+            NavigationManager.NavigateTo("", forceLoad: true);
+        }
     }
     
-    private void GoHome()
+    private void NavigateToHome()
     {
-        // 极简方式：直接跳转到主页
-        JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+        if (isGitHubPages)
+        {
+            // GitHub Pages 环境下，直接使用绝对 URL 跳转
+            JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+        }
+        else
+        {
+            // 本地环境，使用相对路径
+            NavigationManager.NavigateTo("");
+        }
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
     }
 }
