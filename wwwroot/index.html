@@ -13,7 +13,7 @@
     
     <!-- 添加处理路由的脚本 -->
     <script type="text/javascript">
-        // 检测当前环境
+        // 检测当前环境并设置正确的基础路径
         (function() {
             var host = window.location.hostname;
             var path = window.location.pathname;
@@ -28,6 +28,17 @@
                 document.querySelector('base').setAttribute('href', basePath);
             }
             
+            // 处理历史模式SPA的路由
+            if (host.includes('github.io') && !path.includes('apitest')) {
+                // GitHub Pages不支持历史模式，需要特殊处理
+                // 如果不是根路径，且不是apitest页面，重定向到根路径
+                if (path !== basePath && !path.endsWith('/')) {
+                    console.log('Redirecting to base path:', basePath);
+                    window.location.href = basePath;
+                    return;
+                }
+            }
+            
             // 处理从URL查询参数中的路由重定向
             var searchPath = window.location.search;
             if (searchPath && searchPath.startsWith('?')) {
@@ -36,8 +47,21 @@
                     history.replaceState(null, '', (host.includes('localhost') ? '/' : basePath) + route);
                 }
             }
+            
+            // 清除本地存储以解决存储问题
+            console.log('Clearing localStorage on startup');
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                console.log('Storage cleared successfully');
+            } catch (e) {
+                console.error('Failed to clear storage:', e);
+            }
         })();
     </script>
+    
+    <!-- 预加载app.js -->
+    <script src="js/app.js" defer></script>
 </head>
 
 <body>
@@ -76,10 +100,29 @@
             try {
                 localStorage.clear();
                 sessionStorage.clear();
+                console.log('Storage cleared successfully');
                 return true;
             } catch (e) {
                 console.error('Failed to clear storage:', e);
                 return false;
+            }
+        };
+        
+        // 辅助路由处理
+        window.routeHandler = {
+            navigateTo: function(path) {
+                try {
+                    var base = document.querySelector('base').getAttribute('href');
+                    var currentUrl = window.location.origin + base;
+                    var newUrl = new URL(path, currentUrl);
+                    
+                    console.log('Navigating to:', newUrl.href);
+                    window.location.href = newUrl.href;
+                    return true;
+                } catch (e) {
+                    console.error('Navigation error:', e);
+                    return false;
+                }
             }
         };
     </script>
