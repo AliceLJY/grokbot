@@ -1,6 +1,5 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
-@implements IDisposable
 
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
@@ -13,138 +12,21 @@
             <div class="alert alert-warning">
                 <h3>页面未找到</h3>
                 <p>抱歉，找不到请求的页面。</p>
-                <button class="btn btn-primary" @onclick="NavigateToHome">返回首页</button>
+                <button class="btn btn-primary" @onclick="GoHome">返回首页</button>
             </div>
         </LayoutView>
     </NotFound>
 </Router>
 
 @code {
-    private bool isGitHubPages;
-    private string basePath;
-    private DotNetObjectReference<App> objRef;
-
     protected override async Task OnInitializedAsync()
     {
-        objRef = DotNetObjectReference.Create(this);
-        await JSRuntime.InvokeVoidAsync("console.log", "App initialized");
-        
-        // 判断是否在 GitHub Pages 环境
-        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
-        basePath = NavigationManager.BaseUri;
-
-        await JSRuntime.InvokeVoidAsync("console.log", $"Base URI: {NavigationManager.BaseUri}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
-        
-        NavigationManager.LocationChanged += HandleLocationChanged;
-        
-        // 添加初始化时的一次性检查
-        CheckCurrentRoute();
+        await JSRuntime.InvokeVoidAsync("console.log", "App 组件已初始化");
     }
     
-    // 检查当前路由是否有问题
-    private void CheckCurrentRoute()
+    private void GoHome()
     {
-        var currentUri = NavigationManager.Uri;
-        
-        JSRuntime.InvokeVoidAsync("console.log", $"初始化时检查路由: {currentUri}");
-        
-        try
-        {
-            // 检查是否有错误路由情况
-            if (currentUri.EndsWith("/404") || currentUri.EndsWith("/404.html"))
-            {
-                JSRuntime.InvokeVoidAsync("console.log", "检测到404路径，重定向到主页");
-                NavigationManager.NavigateTo("", forceLoad: false);
-            }
-            
-            // 检查聊天路径格式是否正确 - 仅在GitHub Pages环境
-            if (isGitHubPages && currentUri.Contains("/chat/"))
-            {
-                var basePart = basePath.TrimEnd('/');
-                var expectedPrefix = $"{basePart}/chat/";
-                
-                if (!currentUri.Contains(expectedPrefix))
-                {
-                    JSRuntime.InvokeVoidAsync("console.log", $"聊天路径格式不正确: {currentUri}, 应为: {expectedPrefix}");
-                    
-                    // 尝试提取聊天ID
-                    var parts = currentUri.Split('/');
-                    var chatIdIndex = Array.IndexOf(parts, "chat") + 1;
-                    
-                    if (chatIdIndex > 0 && chatIdIndex < parts.Length)
-                    {
-                        var chatId = parts[chatIdIndex];
-                        if (!string.IsNullOrEmpty(chatId))
-                        {
-                            var correctUri = $"{basePart}/chat/{chatId}";
-                            JSRuntime.InvokeVoidAsync("console.log", $"重定向到正确的聊天路径: {correctUri}");
-                            NavigationManager.NavigateTo($"chat/{chatId}", forceLoad: false);
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            JSRuntime.InvokeVoidAsync("console.error", $"路由检查错误: {ex.Message}");
-        }
-    }
-
-    private void HandleLocationChanged(object sender, LocationChangedEventArgs e)
-    {
-        JSRuntime.InvokeVoidAsync("console.log", $"导航到: {e.Location}");
-        
-        // 如果是 404 错误，重定向到主页
-        if (isGitHubPages && (e.Location.EndsWith("/404") || e.Location.EndsWith("/404.html")))
-        {
-            JSRuntime.InvokeVoidAsync("console.log", "检测到404错误，重定向到主页");
-            NavigationManager.NavigateTo("", forceLoad: false);
-        }
-    }
-    
-    private void NavigateToHome()
-    {
-        try
-        {
-            if (isGitHubPages)
-            {
-                // 在GitHub Pages上使用更安全的导航方法
-                JSRuntime.InvokeVoidAsync("eval", @"
-                    try {
-                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
-                        console.log('导航到首页, 基础路径:', baseHref);
-                        
-                        // 优先使用history API
-                        if (window.history && window.history.pushState) {
-                            history.pushState(null, '', baseHref);
-                            window.dispatchEvent(new Event('popstate'));
-                        } else {
-                            // 后备方案
-                            window.location.href = baseHref;
-                        }
-                    } catch(e) {
-                        console.error('导航错误:', e);
-                        window.location.href = '/grokbot/';
-                    }
-                ");
-            }
-            else
-            {
-                // 本地开发环境
-                NavigationManager.NavigateTo("");
-            }
-        }
-        catch (Exception ex)
-        {
-            JSRuntime.InvokeVoidAsync("console.error", $"主页导航错误: {ex.Message}");
-            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
-        }
-    }
-
-    public void Dispose()
-    {
-        NavigationManager.LocationChanged -= HandleLocationChanged;
-        objRef?.Dispose();
+        // 极简方式：直接跳转到主页
+        JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
     }
 }
