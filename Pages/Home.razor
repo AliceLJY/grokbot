@@ -32,7 +32,7 @@
         
         <div class="start-section">
             <h2>Ready to start chatting?</h2>
-            <button @onclick="CreateNewChatDirectly" class="btn btn-primary start-btn" disabled="@isProcessing">
+            <button @onclick="CreateNewChat" class="btn btn-primary start-btn" disabled="@isProcessing">
                 <span class="oi oi-plus"></span> Start a New Chat
                 @if (isProcessing)
                 {
@@ -45,20 +45,16 @@
 
 @code {
     private bool isProcessing = false;
-    private bool isGitHubPages;
 
     protected override async Task OnInitializedAsync()
     {
-        // 判断是否在 GitHub Pages 环境
-        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
-        
         // 清除可能的旧会话状态
-        await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", "lastChatId");
+        await JSRuntime.InvokeVoidAsync("sessionStorage.clear");
         await JSRuntime.InvokeVoidAsync("console.log", "首页初始化，已清除会话状态");
     }
 
-    // 修改的创建聊天方法
-    private async Task CreateNewChatDirectly()
+    // 完全简化的创建聊天方法
+    private async Task CreateNewChat()
     {
         if (isProcessing)
             return;
@@ -75,36 +71,13 @@
             await ChatStorage.SaveChatAsync(newChat);
             
             // 记录新创建的聊天ID
-            await JSRuntime.InvokeVoidAsync("console.log", $"已创建聊天，ID: {newChat.Id}");
+            var chatId = newChat.Id;
+            await JSRuntime.InvokeVoidAsync("console.log", $"已创建聊天，ID: {chatId}");
             
-            // 设置聊天会话ID到sessionStorage，帮助跟踪导航
-            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "lastChatId", newChat.Id);
-            
-            // 构建聊天URL
-            string chatUrl = $"chat/{newChat.Id}";
-            
-            if (isGitHubPages)
-            {
-                // 在GitHub Pages上使用纯JavaScript导航以减少潜在问题
-                await JSRuntime.InvokeVoidAsync("eval", $@"
-                    try {{
-                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
-                        var fullPath = baseHref + '{chatUrl}';
-                        console.log('正在导航到新聊天页面:', fullPath);
-                        
-                        // 使用完全页面刷新来确保干净状态
-                        window.location.href = fullPath;
-                    }} catch(e) {{
-                        console.error('导航错误:', e);
-                        alert('创建聊天时出错，请重试');
-                    }}
-                ");
-            }
-            else
-            {
-                // 在本地环境使用强制刷新
-                NavigationManager.NavigateTo(chatUrl, forceLoad: true);
-            }
+            // 使用最简单直接的导航方式
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                window.location.href = '/grokbot/chat/{chatId}';
+            ");
         }
         catch (Exception ex) 
         {
