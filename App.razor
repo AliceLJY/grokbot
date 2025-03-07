@@ -1,3 +1,7 @@
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
@@ -6,7 +10,54 @@
     <NotFound>
         <PageTitle>Not found</PageTitle>
         <LayoutView Layout="@typeof(MainLayout)">
-            <p role="alert">Sorry, there's nothing at this address.</p>
+            <div class="alert alert-warning">
+                <h3>页面未找到</h3>
+                <p>抱歉，找不到请求的页面。</p>
+                <button class="btn btn-primary" @onclick="NavigateToHome">返回首页</button>
+            </div>
         </LayoutView>
     </NotFound>
 </Router>
+
+@code {
+    private bool isGitHubPages;
+    private string basePath;
+    private DotNetObjectReference<App> objRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        objRef = DotNetObjectReference.Create(this);
+        await JSRuntime.InvokeVoidAsync("console.log", "App initialized");
+        
+        // 判断是否在 GitHub Pages 环境
+        isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
+        basePath = NavigationManager.BaseUri;
+
+        await JSRuntime.InvokeVoidAsync("console.log", $"Base URI: {NavigationManager.BaseUri}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
+        
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object sender, LocationChangedEventArgs e)
+    {
+        JSRuntime.InvokeVoidAsync("console.log", $"Navigation to: {e.Location}");
+        
+        // 如果是 404 错误，可能是因为直接访问路径而不是通过路由
+        if (isGitHubPages && e.Location.EndsWith("/404"))
+        {
+            NavigationManager.NavigateTo("", forceLoad: true);
+        }
+    }
+    
+    private void NavigateToHome()
+    {
+        NavigationManager.NavigateTo("", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+        objRef?.Dispose();
+    }
+}
