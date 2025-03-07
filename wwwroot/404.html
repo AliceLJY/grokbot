@@ -2,32 +2,41 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>GrokBot - 重定向中...</title>
-    <base href="/grokbot/" />
+    <title>GrokBot - 页面重定向</title>
     <script>
-        // 单页应用路由处理
-        var pathSegmentsToKeep = 1; // /grokbot/ 是第一个路径段
-        
-        var loc = window.location;
-        var base = '/grokbot/';
-        var uri = loc.protocol + '//' + loc.hostname + (loc.port ? ':' + loc.port : '') + base;
-        
-        // 重定向到index.html并保留路由信息
-        var redirectUrl = uri + loc.pathname.slice(base.length);
-        if (loc.pathname.indexOf(base) === 0) {
-            // 已经在正确的基础路径上，只需刷新
-            location.href = uri;
-        } else {
-            // 需要重定向到首页
-            location.href = uri;
-        }
+        // 单页应用GitHub Pages重定向脚本
+        (function() {
+            // 获取当前URL及其组成部分
+            var location = window.location;
+            var pathSegments = location.pathname.split('/');
+            var repoName = 'grokbot';
+            
+            // 检查是否在仓库页面路径下
+            var isInRepoPath = pathSegments.length > 1 && pathSegments[1] === repoName;
+            var basePath = '/' + repoName + '/';
+            
+            // 构建重定向URL, 保留路径段和查询字符串
+            var redirectUrl = location.protocol + '//' + location.hostname + basePath;
+            
+            // 如果已经在仓库路径中，保留剩余路径部分
+            if (isInRepoPath && pathSegments.length > 2) {
+                // 丢弃前两段 ["", "grokbot"]，保留剩余路径
+                redirectUrl += pathSegments.slice(2).join('/');
+            }
+            
+            // 添加查询字符串如果存在
+            if (location.search) {
+                redirectUrl += location.search;
+            }
+            
+            // 执行重定向
+            console.log('重定向到: ' + redirectUrl);
+            window.location.replace(redirectUrl);
+        })();
     </script>
 </head>
 <body>
-    <div style="text-align: center; padding-top: 100px; font-family: Arial, sans-serif;">
-        <h1>重定向中...</h1>
-        <p>如果您没有被自动重定向，请<a href="/grokbot/">点击这里</a>。</p>
-    </div>
+    <h1>正在重定向...</h1>
+    <p>如果您没有被自动重定向，请<a href="/grokbot/">点击这里</a>返回主页.</p>
 </body>
 </html>
