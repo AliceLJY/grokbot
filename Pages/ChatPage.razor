@@ -235,8 +235,27 @@
         {
             if (isGitHubPages)
             {
-                // 在 GitHub Pages 环境使用JS导航
-                JSRuntime.InvokeVoidAsync("window.location.replace", basePath);
+                // 避免使用window.location.replace，改用更安全的导航方法
+                JSRuntime.InvokeVoidAsync("eval", @"
+                    try {
+                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
+                        console.log('导航到首页, 基础路径:', baseHref);
+                        
+                        // 使用history API而不是改变location
+                        if (window.history && window.history.pushState) {
+                            history.pushState(null, '', baseHref);
+                            // 触发Blazor路由系统
+                            window.dispatchEvent(new Event('popstate'));
+                        } else {
+                            // 后备方案
+                            window.location.href = baseHref;
+                        }
+                    } catch(e) {
+                        console.error('导航错误:', e);
+                        // 最终后备方案
+                        window.location.href = '/grokbot/';
+                    }
+                ");
             }
             else
             {
@@ -244,10 +263,11 @@
                 NavigationManager.NavigateTo("/");
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 失败时的后备方法
-            JSRuntime.InvokeVoidAsync("window.location.replace", basePath);
+            // 记录错误并使用最基本的方法导航
+            JSRuntime.InvokeVoidAsync("console.error", $"导航错误: {ex.Message}");
+            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
         }
     }
 }
