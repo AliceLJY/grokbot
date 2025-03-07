@@ -11,38 +11,59 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     
-    <!-- 极简化路由处理 -->
+    <!-- 修改处理路由的脚本 -->
     <script type="text/javascript">
-        // 设置基础路径
+        // 检测当前环境并设置正确的基础路径
         (function() {
-            // 清除所有会话存储以防止潜在问题
-            try {
-                sessionStorage.clear();
-                console.log('会话存储已清除');
-            } catch (e) {
-                console.error('无法清除会话存储', e);
-            }
-            
-            // 设置正确的基础路径
             var host = window.location.hostname;
             var path = window.location.pathname;
-            console.log('当前路径:', path);
+            var basePath = '/grokbot/';
             
-            // 开发环境使用根路径，生产环境使用/grokbot/
+            console.log('初始化: 主机 =', host, '路径 =', path);
+            
+            // 本地开发环境使用根目录作为基础路径
             if (host.includes('localhost') || host.includes('127.0.0.1')) {
                 document.querySelector('base').setAttribute('href', '/');
-                console.log('开发环境: 设置基础路径为 /');
-            } else {
-                console.log('生产环境: 设置基础路径为 /grokbot/');
+                console.log('设置本地开发基础路径为: /');
+            } 
+            // GitHub Pages环境使用项目名作为基础路径
+            else if (host.includes('github.io')) {
+                document.querySelector('base').setAttribute('href', basePath);
+                console.log('设置GitHub Pages基础路径为:', basePath);
             }
             
-            // 处理404路径，直接返回主页
-            if (path === '/404.html' || path === '/404') {
-                console.log('检测到404页面，重定向到主页');
-                window.location.replace('/grokbot/');
+            // 修改：仅处理特定情况下的重定向，不自动重定向所有路径
+            if (host.includes('github.io')) {
+                // 如果是聊天路径，不执行重定向
+                if (path.includes('/chat/')) {
+                    console.log('检测到聊天路径，保留当前路由:', path);
+                    return;
+                }
+                
+                // 只有当路径异常时才重定向到基础路径
+                if (path !== basePath && path !== basePath.slice(0, -1) && !path.endsWith('/')) {
+                    if (path === '/404.html' || path === '/404') {
+                        console.log('检测到404页面，重定向到基础路径:', basePath);
+                        window.location.replace(basePath);
+                        return;
+                    }
+                }
+            }
+            
+            // 清除防止重定向循环的计数器
+            try {
+                if (sessionStorage.getItem('redirect_count')) {
+                    console.log('重置重定向计数器');
+                    sessionStorage.removeItem('redirect_count');
+                }
+            } catch (e) {
+                console.error('访问sessionStorage时出错:', e);
             }
         })();
     </script>
+    
+    <!-- 预加载app.js -->
+    <script src="js/app.js" defer></script>
 </head>
 
 <body>
@@ -63,10 +84,74 @@
     </div>
     
     <script>
+        // 监听错误并记录到控制台
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error('Global error:', message, 'at', source, lineno, colno, error);
+            return false;
+        };
+        
         // 滚动到聊天窗口底部
         window.scrollToBottom = (element) => {
             if (element) {
                 element.scrollTop = element.scrollHeight;
+            }
+        };
+        
+        // 优化本地存储使用 - 不完全清除，防止聊天数据丢失
+        window.clearStorage = () => {
+            try {
+                // 保留聊天数据
+                const chatData = localStorage.getItem('grokbot_chats');
+                
+                // 清除除聊天数据以外的内容
+                const keys = Object.keys(localStorage);
+                for (let key of keys) {
+                    if (key !== 'grokbot_chats') {
+                        localStorage.removeItem(key);
+                    }
+                }
+                
+                console.log('已选择性清除存储，保留聊天数据');
+                return true;
+            } catch (e) {
+                console.error('清除存储时失败:', e);
+                return false;
+            }
+        };
+        
+        // 改进的路由处理
+        window.routeHandler = {
+            // 内部状态，不使用localStorage避免清除问题
+            _redirectCount: 0,
+            
+            // 导航到指定路径的改进方法
+            navigateTo: function(path) {
+                try {
+                    var base = document.querySelector('base').getAttribute('href');
+                    console.log('Base path:', base, 'Target path:', path);
+                    
+                    // 确保路径格式正确
+                    if (path.startsWith('/')) {
+                        path = path.substring(1);
+                    }
+                    
+                    var fullPath = base.endsWith('/') ? base + path : base + '/' + path;
+                    console.log('完整导航路径:', fullPath);
+                    
+                    // 优先使用pushState而不是改变location
+                    if (window.history && window.history.pushState) {
+                        window.history.pushState(null, '', fullPath);
+                        // 触发一个popstate事件，让Blazor知道路由已更改
+                        window.dispatchEvent(new Event('popstate'));
+                        return true;
+                    } else {
+                        window.location.href = fullPath;
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('导航错误:', e);
+                    return false;
+                }
             }
         };
     </script>
