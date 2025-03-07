@@ -81,6 +81,10 @@
     private ElementReference messagesContainerRef;
     private bool isGitHubPages;
     private string basePath;
+    private bool isFirstLoad = true;
+    private bool loadAttempted = false;
+    private int loadAttempts = 0;
+    private const int MAX_LOAD_ATTEMPTS = 3;
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,38 +93,96 @@
         basePath = NavigationManager.BaseUri;
         
         // 记录重要信息到控制台
-        await JSRuntime.InvokeVoidAsync("console.log", $"ChatId: {ChatId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage初始化，ChatId: {ChatId}");
         await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {basePath}");
         await JSRuntime.InvokeVoidAsync("console.log", $"Is GitHub Pages: {isGitHubPages}");
         
-        await LoadChat();
+        // 防止无限重定向，设置标记
+        await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "lastChatId", ChatId);
+        await JSRuntime.InvokeVoidAsync("console.log", $"已设置会话标记: lastChatId = {ChatId}");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // 第一次渲染时加载聊天内容
+            await LoadChat();
+            isFirstLoad = false;
+        }
     }
 
     protected override async Task OnParametersSetAsync()
     {
-        if (currentChat?.Id != ChatId)
+        // 如果聊天ID变化并且不是第一次加载，重新加载聊天
+        if (!isFirstLoad && currentChat?.Id != ChatId)
         {
+            await JSRuntime.InvokeVoidAsync("console.log", $"聊天ID已变更: {currentChat?.Id} -> {ChatId}");
             await LoadChat();
         }
     }
 
     private async Task LoadChat()
     {
+        if (loadAttempted) return; // 防止重复加载
+        
+        loadAttempted = true;
+        loadAttempts++;
+        
         try
         {
+            // 记录开始加载
+            await JSRuntime.InvokeVoidAsync("console.log", $"开始加载聊天ID: {ChatId}, 尝试次数: {loadAttempts}");
+            
+            // 检查ChatId是否有效
+            if (string.IsNullOrEmpty(ChatId) || ChatId.Trim().Length < 5)
+            {
+                await JSRuntime.InvokeVoidAsync("console.log", "ChatId无效，重定向到主页");
+                NavigateToHome();
+                return;
+            }
+            
             // 直接获取聊天
             currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
             
             // 如果聊天不存在，重定向到主页
             if (currentChat == null)
             {
-                await JSRuntime.InvokeVoidAsync("console.error", $"Could not find chat with ID: {ChatId}");
+                await JSRuntime.InvokeVoidAsync("console.log", $"找不到ID为{ChatId}的聊天");
+                
+                if (loadAttempts < MAX_LOAD_ATTEMPTS)
+                {
+                    // 尝试再次加载
+                    loadAttempted = false;
+                    await Task.Delay(500); // 短暂延迟
+                    await LoadChat();
+                    return;
+                }
+                
+                // 超过最大尝试次数，返回主页
+                await JSRuntime.InvokeVoidAsync("console.log", $"已达到最大尝试次数: {MAX_LOAD_ATTEMPTS}");
                 NavigateToHome();
+                return;
             }
+            
+            // 成功加载聊天
+            await JSRuntime.InvokeVoidAsync("console.log", $"成功加载聊天: {currentChat.Title}, 消息数量: {currentChat.Messages.Count}");
+            StateHasChanged();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"Error loading chat: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天时出错: {ex.Message}");
+            
+            if (loadAttempts < MAX_LOAD_ATTEMPTS)
+            {
+                // 尝试再次加载
+                loadAttempted = false;
+                await Task.Delay(500); // 短暂延迟
+                await LoadChat();
+                return;
+            }
+            
+            // 超过最大尝试次数，返回主页
             NavigateToHome();
         }
     }
@@ -166,9 +228,10 @@
         
         try
         {
+            // 使用GrokService获取响应
             var response = await GrokService.GetChatResponseAsync(currentChat);
             
-            // Add bot response
+            // 添加助手回复
             var botMessage = new Message
             {
                 Role = "assistant",
@@ -181,11 +244,11 @@
         }
         catch (Exception ex)
         {
-            // Add error message
+            // 添加错误消息
             var errorMessage = new Message
             {
                 Role = "assistant",
-                Content = $"Sorry, there was an error: {ex.Message}",
+                Content = $"抱歉，发生错误: {ex.Message}",
                 Timestamp = DateTime.Now
             };
             
@@ -211,7 +274,7 @@
         if (currentChat == null)
             return;
             
-        var newTitle = await JSRuntime.InvokeAsync<string>("prompt", "Enter new chat title:", currentChat.Title);
+        var newTitle = await JSRuntime.InvokeAsync<string>("prompt", "输入新的聊天标题:", currentChat.Title);
         
         if (!string.IsNullOrWhiteSpace(newTitle))
         {
@@ -229,27 +292,25 @@
         }
     }
     
-    private void NavigateToHome()
+    private async void NavigateToHome()
     {
         try
         {
+            // 清除导航标记，防止循环
+            await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", "lastChatId");
+            await JSRuntime.InvokeVoidAsync("console.log", "已清除会话标记，准备导航到首页");
+            
             if (isGitHubPages)
             {
-                // 避免使用window.location.replace，改用更安全的导航方法
-                JSRuntime.InvokeVoidAsync("eval", @"
+                // 使用纯JavaScript导航以最大程度地减少Blazor路由干扰
+                await JSRuntime.InvokeVoidAsync("eval", @"
                     try {
+                        // 获取基础路径
                         var baseHref = document.querySelector('base').getAttribute('href') || '/';
                         console.log('导航到首页, 基础路径:', baseHref);
                         
-                        // 使用history API而不是改变location
-                        if (window.history && window.history.pushState) {
-                            history.pushState(null, '', baseHref);
-                            // 触发Blazor路由系统
-                            window.dispatchEvent(new Event('popstate'));
-                        } else {
-                            // 后备方案
-                            window.location.href = baseHref;
-                        }
+                        // 直接设置location.href，强制完全刷新，确保干净状态
+                        window.location.href = baseHref;
                     } catch(e) {
                         console.error('导航错误:', e);
                         // 最终后备方案
@@ -259,15 +320,15 @@
             }
             else
             {
-                // 在本地环境直接导航
-                NavigationManager.NavigateTo("/");
+                // 本地环境使用强制刷新
+                NavigationManager.NavigateTo("/", forceLoad: true);
             }
         }
         catch (Exception ex)
         {
             // 记录错误并使用最基本的方法导航
-            JSRuntime.InvokeVoidAsync("console.error", $"导航错误: {ex.Message}");
-            JSRuntime.InvokeVoidAsync("window.location.href", basePath);
+            await JSRuntime.InvokeVoidAsync("console.error", $"导航错误: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("window.location.href", basePath);
         }
     }
 }
