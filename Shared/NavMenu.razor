@@ -65,36 +65,54 @@
         NavigateToChat(newChat.Id);
     }
 
-    private void NavigateToChat(string chatId)
+    private async Task NavigateToChat(string chatId)
     {
-        // 使用与聊天页面一致的导航方法，确保GitHub Pages环境下正常工作
-        var chatUrl = $"chat/{chatId}";
-        
-        if (isGitHubPages)
+        try
         {
-            // 在GitHub Pages环境下使用直接的路径导航
-            JSRuntime.InvokeVoidAsync("eval", $@"
-                try {{
-                    var baseHref = document.querySelector('base').getAttribute('href') || '/';
-                    var fullPath = baseHref + '{chatUrl}';
-                    console.log('从侧边栏导航到聊天: ' + fullPath);
-                    
-                    // 优先使用完整的URL导航，避免相对路径问题
-                    window.location.href = fullPath;
-                }} catch(e) {{
-                    console.error('导航错误:', e);
-                    window.location.href = '/grokbot/{chatUrl}';
-                }}
-            ");
+            // 使用与聊天页面一致的导航方法，确保GitHub Pages环境下正常工作
+            if (isGitHubPages)
+            {
+                // 在GitHub Pages环境下使用JavaScript导航
+                await JSRuntime.InvokeVoidAsync("eval", $@"
+                    try {{
+                        // 获取基础路径
+                        var baseUrl = document.querySelector('base').getAttribute('href') || '/';
+                        if (!baseUrl.endsWith('/')) baseUrl += '/';
+                        
+                        // 记录详细日志
+                        console.log('导航到聊天，基础路径:', baseUrl);
+                        console.log('聊天ID:', '{chatId}');
+                        
+                        // 构建完整URL，确保不会有双斜杠
+                        var chatUrl = baseUrl + 'chat/{chatId}';
+                        console.log('完整URL:', chatUrl);
+                        
+                        // 记录导航前URL
+                        console.log('当前URL:', window.location.href);
+                        
+                        // 使用硬导航确保页面刷新
+                        window.location.href = chatUrl;
+                    }} catch(e) {{
+                        console.error('导航错误:', e);
+                        // 后备方案
+                        window.location.href = '/grokbot/chat/{chatId}';
+                    }}
+                ");
+            }
+            else
+            {
+                // 本地环境使用NavigationManager
+                NavigationManager.NavigateTo($"/chat/{chatId}");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            // 本地环境使用NavigationManager
-            NavigationManager.NavigateTo($"/chat/{chatId}");
+            // 记录错误并使用备用方案
+            await JSRuntime.InvokeVoidAsync("console.error", $"导航到聊天时出错: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("window.location.href", $"/grokbot/chat/{chatId}");
         }
     }
 
-    // 修改后的删除方法，移除了 MouseEventArgs 参数
     private async Task DeleteChatAsync(string chatId)
     {
         // 确认是否删除
@@ -122,7 +140,7 @@
     private bool IsActive(string chatId)
     {
         var url = NavigationManager.Uri;
-        return url.EndsWith($"/chat/{chatId}");
+        return url.EndsWith($"/chat/{chatId}") || url.EndsWith($"chat/{chatId}");
     }
 }
 
