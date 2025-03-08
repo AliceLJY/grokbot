@@ -64,7 +64,7 @@
             }
         };
         
-        // 导航到聊天页面的专用函数
+        // 改进的导航到聊天页面的函数 - 使用SPA导航而非硬导航
         window.navigateToChat = function(chatId) {
             if (!chatId) {
                 console.error('无效的聊天ID');
@@ -87,12 +87,20 @@
                 // 记录导航前URL
                 console.log('当前URL:', window.location.href);
                 
-                // 使用硬导航确保页面刷新
-                window.location.href = chatUrl;
+                // 保存URL到会话存储
+                sessionStorage.setItem('currentChatUrl', chatUrl);
+                
+                // 使用history.pushState进行SPA导航，避免整页刷新
+                history.pushState(null, '', chatUrl);
+                
+                // 触发Blazor路由系统处理导航事件
+                window.dispatchEvent(new Event('popstate'));
+                
+                console.log('SPA导航完成');
             } catch(e) {
                 console.error('导航到聊天出错:', e);
                 
-                // 后备方案
+                // 后备方案 - 使用硬导航
                 if (window.location.hostname.includes('github.io')) {
                     window.location.href = '/grokbot/chat/' + chatId;
                 } else {
@@ -127,8 +135,17 @@
                     // 如果被重定向到了根路径，但有保存的聊天URL，则恢复到那个URL
                     if (path === baseHref || path === baseHref.slice(0, -1)) {
                         console.log('检测到可能的重定向，正在恢复聊天URL');
-                        // 保持URL但不要移除，因为如果导航失败，我们需要再次尝试
-                        window.location.href = savedChatUrl;
+                        
+                        // 使用history.pushState进行SPA导航，避免循环重定向
+                        try {
+                            history.pushState(null, '', savedChatUrl);
+                            window.dispatchEvent(new Event('popstate'));
+                            console.log('已成功恢复到聊天URL:', savedChatUrl);
+                        } catch(e) {
+                            console.error('恢复聊天URL出错:', e);
+                            // 保持URL但不要移除，因为如果导航失败，我们需要再次尝试
+                            window.location.href = savedChatUrl;
+                        }
                     }
                 }
             }
@@ -155,9 +172,19 @@
             // 在GitHub Pages环境下重写链接
             if (window.location.hostname.includes('github.io')) {
                 e.preventDefault();
-                const newHref = base + href.replace(/^\//, '');
-                console.log('重写链接: ' + newHref);
-                window.location.href = newHref;
+                
+                try {
+                    // 使用history.pushState进行SPA导航
+                    const newHref = base + href.replace(/^\//, '');
+                    console.log('重写链接: ' + newHref);
+                    
+                    history.pushState(null, '', newHref);
+                    window.dispatchEvent(new Event('popstate'));
+                } catch(e) {
+                    console.error('链接导航出错:', e);
+                    // 后备方案
+                    window.location.href = base + href.replace(/^\//, '');
+                }
             }
         });
 
