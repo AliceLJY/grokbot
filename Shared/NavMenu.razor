@@ -27,7 +27,7 @@
         {
             @foreach (var chat in chats.OrderByDescending(c => c.CreatedAt))
             {
-                <div class="chat-item @(IsActive(chat.Id) ? "active" : "")" @onclick="() => NavigateToChat(chat.Id, chat)">
+                <div class="chat-item @(IsActive(chat.Id) ? "active" : "")" @onclick="() => NavigateToChatAsync(chat.Id, chat)">
                     <div class="chat-title">@chat.Title</div>
                     <div class="chat-actions">
                         <button class="btn btn-sm btn-delete" @onclick:stopPropagation="true" @onclick="() => DeleteChatAsync(chat.Id)">
@@ -70,10 +70,10 @@
 
         await ChatStorage.SaveChatAsync(newChat);
         await LoadChats();
-        NavigateToChat(newChat.Id, newChat);
+        await NavigateToChatAsync(newChat.Id, newChat);
     }
 
-    private async Task NavigateToChat(string chatId, Chat chat)
+    private async Task NavigateToChatAsync(string chatId, Chat chat)
     {
         try
         {
