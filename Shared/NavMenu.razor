@@ -75,60 +75,44 @@
 
     private async Task NavigateToChatAsync(string chatId, Chat chat)
     {
+        if (string.IsNullOrEmpty(chatId))
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "尝试导航到空聊天ID");
+            return;
+        }
+        
         try
         {
-            // 首先，确保聊天记录已保存到单独的聊天缓存中
-            string chatJson = JsonSerializer.Serialize(chat);
-            await JSRuntime.InvokeVoidAsync("cacheChatForNavigation", chatId, chatJson);
-            await JSRuntime.InvokeVoidAsync("console.log", $"已缓存聊天 {chatId} 准备导航");
+            // 首先，确保聊天记录已保存到本地存储中
+            await ChatStorage.SaveChatAsync(chat);
             
-            // 使用与聊天页面一致的导航方法，确保GitHub Pages环境下正常工作
+            // 捕获聊天ID以便调试
+            await JSRuntime.InvokeVoidAsync("console.log", $"开始导航到聊天: {chatId}");
+            
+            // 简化方法，直接使用NavigationManager导航
             if (isGitHubPages)
             {
-                // 修复：使用history.pushState进行路由导航，而不是直接修改location
-                string baseHref = "/grokbot/";
-                string chatUrl = $"{baseHref}chat/{chatId}";
-                
-                await JSRuntime.InvokeVoidAsync("console.log", $"正在使用pushState导航到: {chatUrl}");
-                
-                // 使用JS进行SPA导航而不是硬导航
-                await JSRuntime.InvokeVoidAsync("eval", $@"
-                    try {{
-                        // 使用history.pushState避免整页刷新
-                        history.pushState(null, '', '{chatUrl}');
-                        // 触发Blazor路由系统处理
-                        window.dispatchEvent(new Event('popstate'));
-                        
-                        // 保存当前URL作为参考
-                        sessionStorage.setItem('currentChatUrl', '{chatUrl}');
-                        console.log('已保存当前URL: {chatUrl}');
-                    }} catch(e) {{
-                        console.error('导航错误:', e);
-                        // 备用方案：传统导航
-                        window.location.href = '{chatUrl}';
-                    }}
-                ");
+                // 在GitHub Pages环境
+                string chatUrl = $"/grokbot/chat/{chatId}";
+                await JSRuntime.InvokeVoidAsync("console.log", $"GitHub Pages环境导航到: {chatUrl}");
+                NavigationManager.NavigateTo(chatUrl);
             }
             else
             {
-                // 本地环境使用NavigationManager
-                NavigationManager.NavigateTo($"/chat/{chatId}");
+                // 本地环境
+                string chatUrl = $"/chat/{chatId}";
+                await JSRuntime.InvokeVoidAsync("console.log", $"本地环境导航到: {chatUrl}");
+                NavigationManager.NavigateTo(chatUrl);
             }
         }
         catch (Exception ex)
         {
-            // 记录错误并使用备用方案
+            // 记录错误详情
             await JSRuntime.InvokeVoidAsync("console.error", $"导航到聊天时出错: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"错误栈跟踪: {ex.StackTrace}");
             
-            // 修复：使用正确的路径
-            if (isGitHubPages)
-            {
-                await JSRuntime.InvokeVoidAsync("window.location.href", $"/grokbot/chat/{chatId}");
-            }
-            else
-            {
-                NavigationManager.NavigateTo($"/chat/{chatId}");
-            }
+            // 提供反馈
+            await JSRuntime.InvokeVoidAsync("alert", "导航时发生错误，请重试");
         }
     }
 
@@ -147,7 +131,7 @@
         {
             if (isGitHubPages)
             {
-                await JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+                NavigationManager.NavigateTo("/grokbot/");
             }
             else
             {
