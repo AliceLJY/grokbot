@@ -194,21 +194,23 @@
         // 检查是否在 GitHub Pages 环境
         isGitHubPages = NavigationManager.BaseUri.Contains("github.io");
         
-        // 记录重要信息到控制台
-        await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage初始化 - ChatId: {ChatId}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"BaseUri: {NavigationManager.BaseUri}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"当前URI: {NavigationManager.Uri}");
-        
-        // 重要：在GitHub Pages环境中，确保URL格式正确
-        if (isGitHubPages)
-        {
-            // 在初始化时保存当前URL，以便在需要时进行参考
-            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "currentChatUrl", NavigationManager.Uri);
-            await JSRuntime.InvokeVoidAsync("console.log", $"已保存当前URL到会话存储: {NavigationManager.Uri}");
-        }
+        // 记录关键信息
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage.OnInitializedAsync - ChatId: {ChatId}");
         
         // 加载聊天数据
         await LoadChat();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // 当导航参数变化时重新加载聊天
+        await JSRuntime.InvokeVoidAsync("console.log", $"ChatPage.OnParametersSetAsync - ChatId: {ChatId}");
+        
+        if (currentChat == null || currentChat.Id != ChatId)
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", $"需要重新加载聊天: {currentChat?.Id} -> {ChatId}");
+            await LoadChat();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -217,23 +219,7 @@
         {
             // 第一次渲染后滚动到底部
             await ScrollToBottom();
-            
-            // 标记已完成加载
-            isLoaded = true;
-            await JSRuntime.InvokeVoidAsync("console.log", "聊天页面完成初始渲染");
-        }
-    }
-    
-    protected override async Task OnParametersSetAsync()
-    {
-        // 当参数(ChatId)变化时重新加载聊天
-        if (isLoaded && currentChat?.Id != ChatId)
-        {
-            await JSRuntime.InvokeVoidAsync("console.log", $"ChatId变更: {currentChat?.Id} -> {ChatId}");
-            await LoadChat();
-            
-            // 通知UI刷新
-            StateHasChanged();
+            await JSRuntime.InvokeVoidAsync("console.log", "ChatPage首次渲染完成");
         }
     }
 
@@ -241,77 +227,41 @@
     {
         try
         {
-            await JSRuntime.InvokeVoidAsync("console.log", $"正在加载聊天: {ChatId}");
+            // 记录正在加载的聊天ID
+            await JSRuntime.InvokeVoidAsync("console.log", $"开始加载聊天: {ChatId}");
             
-            // 首先尝试从导航缓存中获取聊天
-            var cachedChatJson = await JSRuntime.InvokeAsync<string>("getCachedChat", ChatId);
-            if (!string.IsNullOrEmpty(cachedChatJson))
-            {
-                await JSRuntime.InvokeVoidAsync("console.log", "从导航缓存中加载聊天");
-                
-                try
-                {
-                    currentChat = JsonSerializer.Deserialize<Chat>(cachedChatJson, new JsonSerializerOptions { 
-                        PropertyNameCaseInsensitive = true 
-                    });
-                    
-                    if (currentChat != null)
-                    {
-                        await JSRuntime.InvokeVoidAsync("console.log", $"成功从缓存加载聊天: {currentChat.Id}, 消息数: {currentChat.Messages.Count}");
-                        
-                        // 确保我们将缓存的聊天保存到存储服务中
-                        await ChatStorage.SaveChatAsync(currentChat);
-                        
-                        // 通知UI更新
-                        StateHasChanged();
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    await JSRuntime.InvokeVoidAsync("console.error", $"从缓存解析聊天时出错: {ex.Message}");
-                }
-            }
-            
-            // 如果从缓存加载失败，从存储服务加载
+            // 直接从存储服务加载聊天数据
             currentChat = await ChatStorage.GetChatByIdAsync(ChatId);
             
             if (currentChat == null)
             {
                 await JSRuntime.InvokeVoidAsync("console.log", $"找不到ID为 {ChatId} 的聊天，创建新聊天");
                 
-                // 创建新聊天
+                // 找不到聊天时创建新聊天
                 currentChat = new Chat 
                 { 
                     Id = ChatId,
                     Title = "New Chat" 
                 };
                 
+                // 保存新创建的聊天
                 await ChatStorage.SaveChatAsync(currentChat);
-                await JSRuntime.InvokeVoidAsync("console.log", $"已创建新聊天: {currentChat.Id}");
             }
             else
             {
-                await JSRuntime.InvokeVoidAsync("console.log", $"已加载聊天: {currentChat.Id}, 消息数: {currentChat.Messages.Count}");
-                
-                // 输出聊天的所有消息，用于调试
-                for (int i = 0; i < currentChat.Messages.Count; i++)
-                {
-                    var message = currentChat.Messages[i];
-                    await JSRuntime.InvokeVoidAsync("console.log", $"消息 {i+1}: {message.Role} - {message.Content.Substring(0, Math.Min(50, message.Content.Length))}...");
-                }
+                await JSRuntime.InvokeVoidAsync("console.log", $"已加载聊天: {ChatId}, 消息数: {currentChat.Messages.Count}");
             }
             
             // 通知UI更新
             StateHasChanged();
             
-            // 确保渲染后滚动到底部
-            await Task.Delay(100);
+            // 在渲染后滚动到底部
+            await Task.Delay(50);
             await ScrollToBottom();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天时出错: {ex.Message}\n{ex.StackTrace}");
+            await JSRuntime.InvokeVoidAsync("console.error", $"加载聊天出错: {ex.Message}");
             
             // 创建新的聊天作为备用选项
             currentChat = new Chat 
@@ -319,7 +269,6 @@
                 Id = ChatId,
                 Title = "New Chat" 
             };
-            await ChatStorage.SaveChatAsync(currentChat);
             
             // 通知UI更新
             StateHasChanged();
@@ -434,36 +383,20 @@
         {
             if (isGitHubPages)
             {
-                // 在GitHub Pages环境使用SPA导航
-                JSRuntime.InvokeVoidAsync("eval", @"
-                    try {
-                        // 清除会话存储中的当前URL
-                        sessionStorage.removeItem('currentChatUrl');
-                        
-                        // 获取基础路径
-                        var baseHref = document.querySelector('base').getAttribute('href') || '/';
-                        console.log('导航到首页, 基础路径:', baseHref);
-                        
-                        // 使用history.pushState进行SPA导航
-                        history.pushState(null, '', baseHref);
-                        window.dispatchEvent(new Event('popstate'));
-                    } catch(e) {
-                        console.error('导航错误:', e);
-                        // 最终后备方案
-                        window.location.href = '/grokbot/';
-                    }
-                ");
+                // 在GitHub Pages环境
+                NavigationManager.NavigateTo("/grokbot/");
             }
             else
             {
-                // 本地环境使用NavigationManager
+                // 在本地环境
                 NavigationManager.NavigateTo("/");
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // 最终后备方案
-            JSRuntime.InvokeVoidAsync("window.location.href", "/grokbot/");
+            // 记录错误并使用备用方案
+            JSRuntime.InvokeVoidAsync("console.error", $"返回首页出错: {ex.Message}");
+            JSRuntime.InvokeVoidAsync("window.location.href", isGitHubPages ? "/grokbot/" : "/");
         }
     }
 }
