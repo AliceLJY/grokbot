@@ -1,3 +1,5 @@
+> **[Archived]** This repository is no longer maintained and is kept for history only.
+
 # GrokBot
 
 GrokBot是一个由Grok AI驱动的聊天应用程序。它为与Grok AI语言模型交互提供了用户友好的界面。
