@@ -1,4 +1,5 @@
-> **[Archived]** This repository is no longer maintained and is kept for history only.
+> **2025 年历史演示。** GitHub Pages 能打开只代表静态前端仍在，不代表聊天链可用；
+> 仓库归档后部署已冻结，Render 后端也不提供持续可用性保证。
 
 # GrokBot
 
@@ -10,7 +11,7 @@ GrokBot是一个由Grok AI驱动的聊天应用程序。它为与Grok AI语言�
 
 ### GitHub Pages部署
 
-当更改推送到主分支时，前端会自动部署到GitHub Pages。部署过程由GitHub Actions工作流处理。
+最后一个版本曾由 GitHub Actions 自动部署到 GitHub Pages；仓库归档后不再维护这条部署链。
 
 您可以在https://alicelJY.github.io/grokbot/ 访问已部署的应用程序
 
@@ -25,6 +26,7 @@ GrokBot是一个由Grok AI驱动的聊天应用程序。它为与Grok AI语言�
 
 ## 后端（Render.com）
 
-后端API托管在Render.com上。后端处理与Grok AI API的通信，并为前端提供代理。
+最后一个版本把后端 API 部署在 Render.com，用来代理 Grok AI 调用；这是历史架构说明，
+不代表当前服务仍可用。
 
 后端代码可在https://github.com/AliceLJY/grokbot-backend 获取
